@@ -12,10 +12,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun LoginScreen(onNavigateToSignUp: () -> Unit) {
+fun SignUpScreen(onSignUpComplete: () -> Unit) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isAutoLoginChecked by remember { mutableStateOf(false) }
+    var isTermsChecked by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -23,9 +23,9 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 로고 자리
+        // 제목
         Text(
-            text = "집신",
+            text = "회원가입",
             style = MaterialTheme.typography.headlineLarge,
             modifier = Modifier.padding(bottom = 24.dp)
         )
@@ -52,32 +52,31 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 자동 로그인 및 버튼
+        // 약관 체크박스
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
-                checked = isAutoLoginChecked,
-                onCheckedChange = { isAutoLoginChecked = it }
+                checked = isTermsChecked,
+                onCheckedChange = { isTermsChecked = it }
             )
-            Text("자동 로그인")
+            Text("이용 약관에 동의합니다.")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // 로그인 버튼
+        // 회원가입 버튼
         Button(
-            onClick = { /* 로그인 로직 추가 */ },
-            modifier = Modifier.fillMaxWidth()
+            onClick = {
+                if (isTermsChecked) {
+                    // 회원가입 완료 로직 추가
+                    onSignUpComplete()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = isTermsChecked
         ) {
-            Text("로그인")
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 회원가입 이동 텍스트
-        TextButton(onClick = onNavigateToSignUp) {
             Text("회원가입")
         }
     }
@@ -85,6 +84,6 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewLoginScreen() {
-    LoginScreen(onNavigateToSignUp = {})
+fun PreviewSignUpScreen() {
+    SignUpScreen(onSignUpComplete = {})
 }
