@@ -8,7 +8,8 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="signature">#4450c6</color>
+    <color name="signature">#253f5a</color>
+    <color name="signature2">#6faae4</color>
     <color name="kakao_yellow">#FEE500</color>
     <color name="primary">#1A73E8</color>
 </resources>
