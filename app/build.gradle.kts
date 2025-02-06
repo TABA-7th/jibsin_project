@@ -60,4 +60,6 @@ dependencies {
     // Debugging tools
     debugImplementation("androidx.compose.ui:ui-tooling:1.5.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.1")
+
+    implementation("com.google.accompanist:accompanist-systemuicontroller:0.31.0-alpha")
 }
