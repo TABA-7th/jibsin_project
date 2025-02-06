@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,7 +17,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role.Companion.Image
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -36,64 +36,93 @@ fun HomeScreen() {
                 modifier = Modifier.width(280.dp),
                 drawerContainerColor = Color.White
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
+                Column(
+                    modifier = Modifier.fillMaxSize()
                 ) {
+                    // 사이드바 상단 프로필 영역
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // 프로필 아이콘을 원 안에 배치
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color.Gray),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_user_profile),
-                                contentDescription = "Profile",
-                                modifier = Modifier.size(32.dp),
-                                tint = Color.White
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // 프로필 아이콘 원 배경
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Gray),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_user_profile),
+                                    contentDescription = "Profile",
+                                    modifier = Modifier.size(32.dp),
+                                    tint = Color.White
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "김철수",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
-                        Text(
-                            text = "김철수",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // 햄버거바 아이콘 (사이드바 우측 상단)
+                        IconButton(onClick = {
+                            scope.launch {
+                                drawerState.close()
+                            }
+                        }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Close Menu")
+                        }
+                    }
+
+                    Divider()
+
+                    // 메뉴 아이템
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        NavigationMenuItem("마이페이지")
+                        Divider(color = Color.LightGray, thickness = 1.dp)
+                        NavigationMenuItem("조회 내역")
+                        Divider(color = Color.LightGray, thickness = 1.dp)
+                        NavigationMenuItem("나의 계약 내역")
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // 로그아웃 버튼
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        TextButton(
+                            onClick = { /* 로그아웃 처리 */ },
+                            modifier = Modifier.wrapContentWidth()
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_logout),
+                                contentDescription = "Logout",
+                                tint = Color(0xFF253F5A),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "로그아웃",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF253F5A)
+                            )
+                        }
                     }
                 }
-
-                Divider()
-
-                // 아이콘 제거한 네비게이션 아이템
-                NavigationDrawerItem(
-                    icon = {},
-                    label = { Text("마이페이지") },
-                    selected = false,
-                    onClick = { /* 마이페이지로 이동 */ }
-                )
-
-                NavigationDrawerItem(
-                    icon = {},
-                    label = { Text("조회 내역") },
-                    selected = false,
-                    onClick = { /* 조회 내역으로 이동 */ }
-                )
-
-                NavigationDrawerItem(
-                    icon = {},
-                    label = { Text("나의 계약 내역") },
-                    selected = false,
-                    onClick = { /* 계약 내역으로 이동 */ }
-                )
             }
         }
     ) {
@@ -104,11 +133,7 @@ fun HomeScreen() {
                     navigationIcon = {
                         IconButton(onClick = {
                             scope.launch {
-                                if (drawerState.isOpen) {
-                                    drawerState.close() // 사이드메뉴가 열려있다면 닫기
-                                } else {
-                                    drawerState.open() // 사이드메뉴가 닫혀있다면 열기
-                                }
+                                drawerState.open()
                             }
                         }) {
                             Icon(Icons.Filled.Menu, contentDescription = "Menu")
@@ -181,6 +206,37 @@ fun HomeScreen() {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun NavigationMenuItem(label: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .background(Color(0xFFF0F0F0)),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Icon(
+                painter = painterResource(id = R.drawable.ic_arrow),
+                contentDescription = null,
+                tint = Color.DarkGray,
+                modifier = Modifier.size(25.dp)
+            )
         }
     }
 }
