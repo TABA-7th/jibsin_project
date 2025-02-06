@@ -61,5 +61,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling:1.5.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.1")
 
+    implementation ("androidx.compose.material:material-icons-extended:1.5.1")
+
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.31.0-alpha")
+    implementation ("com.google.accompanist:accompanist-pager:0.31.0-alpha")
+    implementation ("com.google.accompanist:accompanist-pager-indicators:0.31.0-alpha")
+
 }

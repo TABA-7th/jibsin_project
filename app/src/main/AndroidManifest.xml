@@ -3,6 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.project.jibsin_project">
 
+    <!-- 카메라 권한 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -33,6 +39,7 @@
         <activity android:name=".scan.BuildingRegistryScanActivity" />
         <activity android:name=".scan.RegistryDocumentScanActivity" />
         <activity android:name=".scan.ContractScanActivity" />
+        <activity android:name=".scan.OnboardingScanActivity" />
 
     </application>
 
