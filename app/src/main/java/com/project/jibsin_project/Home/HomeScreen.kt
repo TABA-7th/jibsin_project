@@ -1,5 +1,9 @@
 package com.project.jibsin_project.Home
 
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -27,7 +31,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     onMonthlyRentClick: () -> Unit,
-    onLeaseClick: () -> Unit
+    onLeaseClick: () -> Unit,
+    onChatBotClick: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -193,12 +198,14 @@ fun HomeScreen(
                             .background(Color.White, shape = RoundedCornerShape(40.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_ai_chatbot),
-                            contentDescription = "AI 챗봇",
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(60.dp)
-                        )
+                        IconButton(onClick = onChatBotClick) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_ai_chatbot),
+                                contentDescription = "AI 챗봇",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(60.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -281,7 +288,8 @@ fun HomeCard(icon: Painter, label: String, onClick: () -> Unit) {
 @Composable
 fun PreviewHomeScreen() {
     HomeScreen(
-        onMonthlyRentClick={},
-        onLeaseClick={}
+        onMonthlyRentClick = {},
+        onLeaseClick = {},
+        onChatBotClick = {}
     )
 }

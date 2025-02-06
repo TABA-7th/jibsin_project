@@ -40,6 +40,7 @@
         <activity android:name=".scan.RegistryDocumentScanActivity" />
         <activity android:name=".scan.ContractScanActivity" />
         <activity android:name=".scan.OnboardingScanActivity" />
+        <activity android:name=".chatbot.ChatBotActivity" />
 
     </application>
 

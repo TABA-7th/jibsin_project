@@ -42,7 +42,8 @@ fun AppNavigation() {
         // 로그인 성공 후 홈 화면
         HomeScreen(
             onMonthlyRentClick = { /* 월세 화면 이동 처리 */ },
-            onLeaseClick = { /* 전세 화면 이동 처리 */ }
+            onLeaseClick = { /* 전세 화면 이동 처리 */ },
+            onChatBotClick= { /* 챗봇 화면 이동 처리 */ }
         )
     } else if (isSignUpScreen) {
         // 회원가입 화면
