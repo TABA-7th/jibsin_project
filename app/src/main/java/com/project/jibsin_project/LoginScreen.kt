@@ -44,8 +44,10 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
             onValueChange = { username = it },
             label = { Text("아이디") },
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = Color(0xFF4450C6),
-                cursorColor = Color(0xFF4450C6)
+                focusedBorderColor = Color(0xFF253F5A), // 테두리 색상
+                cursorColor = Color(0xFF253F5A), // 커서 색상
+                focusedLabelColor = Color(0xFF253F5A), // 포커스된 라벨 색상
+                unfocusedLabelColor = Color.Gray // 비포커스 상태 라벨 색상
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -60,8 +62,10 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = Color(0xFF4450C6),
-                cursorColor = Color(0xFF4450C6)
+                focusedBorderColor = Color(0xFF253F5A), // 테두리 색상
+                cursorColor = Color(0xFF253F5A), // 커서 색상
+                focusedLabelColor = Color(0xFF253F5A), // 포커스된 라벨 색상
+                unfocusedLabelColor = Color.Gray // 비포커스 상태 라벨 색상
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -77,13 +81,13 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
                 checked = isAutoLoginChecked,
                 onCheckedChange = { isAutoLoginChecked = it },
                 colors = CheckboxDefaults.colors(
-                    checkedColor = Color(0xFF4450C6) // 시그니처 색상
+                    checkedColor = Color(0xFF253F5A) // 시그니처 색상
                 )
             )
             Text("자동 로그인", modifier = Modifier.weight(1f))
             TextButton(
                 onClick = { /* 비밀번호 찾기 로직 */ },
-                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4450C6)) // 시그니처 색상
+                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF253F5A)) // 시그니처 색상
             ) {
                 Text("비밀번호 찾기")
             }
@@ -94,7 +98,7 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
         // 로그인 버튼
         Button(
             onClick = { /* 로그인 로직 */ },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4450C6)), // 시그니처 색상
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)), // 시그니처 색상
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("로그인", color = Color.White)
@@ -147,7 +151,7 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
         // 회원가입
         TextButton(
             onClick = onNavigateToSignUp,
-            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF4450C6)) // 시그니처 색상
+            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF253F5A)) // 시그니처 색상
         ) {
             Text("회원가입")
         }
