@@ -29,6 +29,8 @@
             android:name=".SignUpActivity"
             android:exported="false" /> <!-- 회원가입 화면은 외부에서 시작되지 않으므로 false -->
 
+        <activity android:name=".HomeActivity" />
+
     </application>
 
 </manifest>

@@ -9,10 +9,17 @@ class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            LoginScreen(onNavigateToSignUp = {
-                val intent = Intent(this, SignUpActivity::class.java)
-                startActivity(intent)
-            })
+            LoginScreen(
+                onNavigateToSignUp = {
+                    val intent = Intent(this, SignUpActivity::class.java)
+                    startActivity(intent)
+                },
+                onLoginSuccess = {
+                    val intent = Intent(this, HomeActivity::class.java)
+                    startActivity(intent)
+                    finish() // 로그인 화면 종료
+                }
+            )
         }
     }
 }

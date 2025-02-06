@@ -33,14 +33,22 @@ fun MyApp() {
 @Composable
 fun AppNavigation() {
     var isSignUpScreen by remember { mutableStateOf(false) }
+    var isLoggedIn by remember { mutableStateOf(false) }
 
-    if (isSignUpScreen) {
+    if (isLoggedIn) {
+        // 로그인 성공 후 홈 화면
+        HomeScreen()
+    } else if (isSignUpScreen) {
+        // 회원가입 화면
         SignUpScreen(onSignUpComplete = { isSignUpScreen = false })
     } else {
-        LoginScreen(onNavigateToSignUp = { isSignUpScreen = true })
+        // 로그인 화면
+        LoginScreen(
+            onNavigateToSignUp = { isSignUpScreen = true },
+            onLoginSuccess = { isLoggedIn = true } // 로그인 성공 처리
+        )
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable

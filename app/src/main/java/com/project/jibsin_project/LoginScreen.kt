@@ -15,7 +15,10 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(onNavigateToSignUp: () -> Unit) {
+fun LoginScreen(
+    onNavigateToSignUp: () -> Unit,
+    onLoginSuccess: () -> Unit
+) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isAutoLoginChecked by remember { mutableStateOf(false) }
@@ -97,8 +100,10 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
 
         // 로그인 버튼
         Button(
-            onClick = { /* 로그인 로직 */ },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)), // 시그니처 색상
+            onClick = {
+                onLoginSuccess()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("로그인", color = Color.White)
@@ -161,5 +166,8 @@ fun LoginScreen(onNavigateToSignUp: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewLoginScreen() {
-    LoginScreen(onNavigateToSignUp = {})
+    LoginScreen(
+        onNavigateToSignUp = {},
+        onLoginSuccess = {}
+    )
 }
