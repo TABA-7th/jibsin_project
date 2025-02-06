@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -72,14 +73,26 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (showFaq) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .padding(8.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "자주 묻는 질문",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
                         faqList.forEach { (question, subQuestions) ->
                             var expanded by remember { mutableStateOf(false) }
+                            // 클릭 영역을 항목 필드 전체로 확장
                             Card(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 4.dp)
+                                    .clickable { expanded = !expanded },
                                 colors = CardDefaults.cardColors(containerColor = Color.White)
                             ) {
                                 Column(modifier = Modifier.padding(8.dp)) {
@@ -93,18 +106,16 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.weight(1f)
                                         )
-                                        IconButton(onClick = { expanded = !expanded }) {
-                                            Icon(
-                                                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                contentDescription = null
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = null
+                                        )
                                     }
                                     if (expanded) {
                                         subQuestions.forEach { subQuestion ->
                                             TextButton(onClick = {
-                                                chatMessages.add("나: $subQuestion")
-                                                chatMessages.add("챗봇: '$subQuestion'에 대한 답변입니다.")
+                                                chatMessages.add("$subQuestion")
+                                                chatMessages.add("'$subQuestion'에 대한 답변입니다.")
                                                 showFaq = false
                                             }) {
                                                 Text(subQuestion, color = Color(0xFF253F5A))
@@ -145,8 +156,8 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
                             IconButton(
                                 onClick = {
                                     if (userMessage.text.isNotEmpty()) {
-                                        chatMessages.add("나: ${userMessage.text}")
-                                        chatMessages.add("챗봇: 질문을 이해했어요! 답변을 준비 중입니다.")
+                                        chatMessages.add("${userMessage.text}")
+                                        chatMessages.add("질문을 이해했어요! 답변을 준비 중입니다.")
                                         userMessage = TextFieldValue("")
                                     }
                                 }
@@ -185,7 +196,7 @@ fun ChatBubble(message: String, isUserMessage: Boolean) {
         contentAlignment = if (isUserMessage) Alignment.CenterEnd else Alignment.CenterStart,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp, horizontal = 8.dp)
     ) {
         Card(
             shape = RoundedCornerShape(12.dp),
