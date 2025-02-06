@@ -61,7 +61,9 @@ fun SignUpScreen(onSignUpComplete: () -> Unit) {
                 checked = isTermsChecked,
                 onCheckedChange = { isTermsChecked = it }
             )
-            Text("이용 약관에 동의합니다.")
+            Text("본 어플은 사용자 편의를 위한 AI 기반 계약서 검토 서비스로, " +
+                    "법률 자문을 제공하지 않으며 법적 효력을 보장하지 않습니다. " +
+                    "최종 계약 전 반드시 법률 전문가와 상담하시길 권장합니다.")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
