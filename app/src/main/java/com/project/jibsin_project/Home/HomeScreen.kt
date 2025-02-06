@@ -1,4 +1,4 @@
-package com.project.jibsin_project
+package com.project.jibsin_project.Home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,11 +20,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.project.jibsin_project.R
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onMonthlyRentClick: () -> Unit,
+    onLeaseClick: () -> Unit
+) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -166,12 +169,12 @@ fun HomeScreen() {
                         HomeCard(
                             icon = painterResource(id = R.drawable.ic_calendar),
                             label = "월세",
-                            onClick = { /* 월세 화면 이동 */ }
+                            onClick = onMonthlyRentClick // 월세 버튼 클릭 시 이동 처리
                         )
                         HomeCard(
                             icon = painterResource(id = R.drawable.ic_home),
                             label = "전세",
-                            onClick = { /* 전세 화면 이동 */ }
+                            onClick = onLeaseClick // 전세 버튼 클릭 시 이동 처리
                         )
                     }
                 }
@@ -277,5 +280,8 @@ fun HomeCard(icon: Painter, label: String, onClick: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewHomeScreen() {
-    HomeScreen()
+    HomeScreen(
+        onMonthlyRentClick={},
+        onLeaseClick={}
+    )
 }

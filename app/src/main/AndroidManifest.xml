@@ -16,7 +16,7 @@
 
         <!-- 앱 시작 시 열리는 로그인 화면 -->
         <activity
-            android:name=".LoginActivity"
+            android:name=".login.LoginActivity"
             android:exported="true"> <!-- android:exported 추가 -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -26,10 +26,13 @@
 
         <!-- 회원가입 화면 -->
         <activity
-            android:name=".SignUpActivity"
+            android:name=".login.SignUpActivity"
             android:exported="false" /> <!-- 회원가입 화면은 외부에서 시작되지 않으므로 false -->
 
-        <activity android:name=".HomeActivity" />
+        <activity android:name=".Home.HomeActivity" />
+        <activity android:name=".scan.BuildingRegistryScanActivity" />
+        <activity android:name=".scan.RegistryDocumentScanActivity" />
+        <activity android:name=".scan.ContractScanActivity" />
 
     </application>
 

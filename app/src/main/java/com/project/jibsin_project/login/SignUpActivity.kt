@@ -1,4 +1,4 @@
-package com.project.jibsin_project
+package com.project.jibsin_project.login
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

@@ -1,9 +1,10 @@
-package com.project.jibsin_project
+package com.project.jibsin_project.login
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.project.jibsin_project.Home.HomeActivity
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

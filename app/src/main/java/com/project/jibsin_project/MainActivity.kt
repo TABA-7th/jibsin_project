@@ -7,6 +7,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import com.project.jibsin_project.Home.HomeScreen
+import com.project.jibsin_project.login.LoginScreen
+import com.project.jibsin_project.login.SignUpScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,7 +40,10 @@ fun AppNavigation() {
 
     if (isLoggedIn) {
         // 로그인 성공 후 홈 화면
-        HomeScreen()
+        HomeScreen(
+            onMonthlyRentClick = { /* 월세 화면 이동 처리 */ },
+            onLeaseClick = { /* 전세 화면 이동 처리 */ }
+        )
     } else if (isSignUpScreen) {
         // 회원가입 화면
         SignUpScreen(onSignUpComplete = { isSignUpScreen = false })

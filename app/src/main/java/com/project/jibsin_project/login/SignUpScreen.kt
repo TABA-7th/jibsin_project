@@ -1,4 +1,4 @@
-package com.project.jibsin_project
+package com.project.jibsin_project.login
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions

@@ -1,4 +1,4 @@
-package com.project.jibsin_project
+package com.project.jibsin_project.login
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.project.jibsin_project.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
