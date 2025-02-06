@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,10 +41,20 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
     var userMessage by remember { mutableStateOf(TextFieldValue("")) }
     val chatMessages = remember { mutableStateListOf("안녕하세요! 😊 어떻게 도와드릴까요?") }
     val faqList = listOf(
-        "전세 대출 관련 질문" to "전세 대출을 받을 때 필요한 서류는 무엇인가요?",
-        "계약 문제 해결 방법" to "계약 위반 시 어떻게 대응해야 하나요?",
-        "기타 문의 사항" to "임대차 계약의 기본 조건은 무엇인가요?"
+        "전세 대출 관련 질문" to listOf(
+            "대출 신청 시 필요한 서류는 무엇인가요?",
+            "대출 한도는 어떻게 결정되나요?"
+        ),
+        "계약 문제 해결 방법" to listOf(
+            "계약 위반 시 어떻게 대처해야 하나요?",
+            "계약 해지 조건은 무엇인가요?"
+        ),
+        "기타 문의 사항" to listOf(
+            "임대차 계약의 기본 조건은 무엇인가요?",
+            "보증금 반환은 어떻게 이루어지나요?"
+        )
     )
+    val expandedFaqs = remember { mutableStateMapOf<String, Boolean>() }
     var isFaqVisible by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -77,18 +89,14 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
                 }
             }
 
-            // 자주 묻는 질문 표시
+            // 자주 묻는 질문 영역
             if (isFaqVisible) {
                 Divider(color = Color.LightGray, thickness = 1.dp)
                 Column(modifier = Modifier.padding(8.dp)) {
-                    Text(
-                        text = "자주 묻는 질문",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    for ((question, answer) in faqList) {
+                    Text("자주 묻는 질문", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    for ((question, subQuestions) in faqList) {
+                        val isExpanded = expandedFaqs[question] ?: false
                         Card(
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
@@ -96,17 +104,47 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
                                 .padding(vertical = 4.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(
-                                    text = question,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = answer,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = question,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(onClick = {
+                                        expandedFaqs[question] = !isExpanded
+                                    }) {
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                                if (isExpanded) {
+                                    subQuestions.forEach { subQuestion ->
+                                        TextButton(
+                                            onClick = {
+                                                chatMessages.add("나: $subQuestion")
+                                                chatMessages.add("챗봇: ${subQuestion}에 대한 답변입니다.") // 문자열 보간법 수정
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = subQuestion,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF253F5A)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -117,25 +155,22 @@ fun ChatBotScreen(onBackClick: () -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(8.dp)
+                    .background(Color(0xFFF0F0F0)),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
                     onClick = { isFaqVisible = !isFaqVisible },
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.padding(end = 8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "자주 묻는 질문 토글",
-                        tint = Color(0xFF253F5A)
-                    )
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "FAQ 열기", tint = Color.Black)
                 }
                 OutlinedTextField(
                     value = userMessage,
                     onValueChange = { userMessage = it },
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = 8.dp),
+                        .padding(end = 4.dp),
                     placeholder = { Text("AI 챗봇에 무엇이든 물어보세요!") },
                     shape = RoundedCornerShape(16.dp),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -191,3 +226,4 @@ fun ChatBubble(message: String, isUserMessage: Boolean) {
 fun PreviewChatBotScreen() {
     ChatBotScreen(onBackClick = {})
 }
+
