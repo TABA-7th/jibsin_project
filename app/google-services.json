@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "794765571452",
+    "project_id": "jibsin",
+    "storage_bucket": "jibsin.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:794765571452:android:e3d3cd88ab054cae04e0f9",
+        "android_client_info": {
+          "package_name": "com.project.jibsin_project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmJCOdg5-jKTuv_DKUIjaRk9AemjVsZpo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
