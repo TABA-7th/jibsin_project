@@ -37,8 +37,8 @@ fun LoginScreen(
             painter = painterResource(id = R.drawable.ic_logo),
             contentDescription = null,
             modifier = Modifier
-                .size(100.dp)
-                .padding(bottom = 40.dp), // 아이디 입력란과의 공백 증가
+                .size(140.dp)
+                .padding(bottom = 55.dp), // 아이디 입력란과의 공백 증가
             tint = Color.Unspecified
         )
 
@@ -56,7 +56,7 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(1.dp)) // 아이디, 비밀번호 입력란 사이 간격
 
         // 비밀번호 입력
         OutlinedTextField(
@@ -73,8 +73,6 @@ fun LoginScreen(
             ),
             modifier = Modifier.fillMaxWidth()
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // 자동 로그인 및 비밀번호 찾기
         Row(
@@ -97,7 +95,7 @@ fun LoginScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // 로그인 버튼
         Button(
@@ -110,7 +108,7 @@ fun LoginScreen(
             Text("로그인", color = Color.White)
         }
 
-        Spacer(modifier = Modifier.height(32.dp)) // 로그인 버튼과 다른 방법으로 로그인 사이 공백 증가
+        Spacer(modifier = Modifier.height(70.dp)) // 로그인 버튼과 다른 방법으로 로그인 사이 공백 증가
 
         // 다른 방법으로 로그인
         Row(
