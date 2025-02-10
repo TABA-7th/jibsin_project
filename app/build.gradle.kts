@@ -1,16 +1,17 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.project.jibsin_project"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.project.jibsin_project"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -38,7 +39,7 @@ android {
         jvmTarget = "1.8"
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.2" // 최신 Compose Compiler 버전
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
 }
 
@@ -51,20 +52,31 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
 
     // Jetpack Compose dependencies
-    implementation("androidx.activity:activity-compose:1.8.0")
-    implementation("androidx.compose.ui:ui:1.5.1")
-    implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.5.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.1")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.compose.ui:ui:1.5.4")
+    implementation("androidx.compose.material3:material3:1.2.0")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.5.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
     // Debugging tools
-    debugImplementation("androidx.compose.ui:ui-tooling:1.5.1")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.1")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.5.4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.4")
 
-    implementation ("androidx.compose.material:material-icons-extended:1.5.1")
+    implementation ("androidx.compose.material:material-icons-extended:1.5.4")
 
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.31.0-alpha")
     implementation ("com.google.accompanist:accompanist-pager:0.31.0-alpha")
     implementation ("com.google.accompanist:accompanist-pager-indicators:0.31.0-alpha")
 
+    // firebase
+    implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-storage-ktx")  // Firebase Storage
+    implementation("com.google.firebase:firebase-firestore-ktx") // Firebase Firestore
+
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("com.google.accompanist:accompanist-permissions:0.31.0-alpha")
 }
