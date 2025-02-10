@@ -53,6 +53,8 @@ class OnboardingScanActivity : ComponentActivity() {
 @Composable
 fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
     val context = LocalContext.current
+    val activity = LocalContext.current as ComponentActivity
+    var hasCameraPermission by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -64,19 +66,50 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         OnboardingPage("계약서", "계약서를 스캔하여 분석하세요.", R.drawable.ic_scan)
     )
 
-    // 카메라 권한 요청
-    val hasPermission = rememberCameraPermissionState {
-        // Permission granted callback
+    // 카메라 권한 요청 런처
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        hasCameraPermission = isGranted
     }
 
+    // 카메라 실행 런처
     val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            // URI를 통해 이미지 업로드 처리
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            isLoading = true
+            coroutineScope.launch {
+                try {
+                    val documentType = when (pagerState.currentPage) {
+                        0 -> "building_registry"
+                        1 -> "registry_document"
+                        2 -> "contract"
+                        else -> return@launch
+                    }
+                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, documentType)
+                    val document = ScannedDocument(
+                        type = documentType,
+                        imageUrl = imageUrl,
+                        userId = "test_user"
+                    )
+                    val documentId = firestoreUtil.saveScannedDocument(document)
+                    isLoading = false
+
+                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                        putExtra("documentId", documentId)
+                        putExtra("documentType", documentType)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    isLoading = false
+                    errorMessage = "업로드 실패: ${e.message}"
+                }
+            }
         }
     }
 
+    // 갤러리 실행 런처
     val pickImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -112,6 +145,23 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         }
     }
 
+    // 카메라 버튼 클릭 처리
+    val onCameraClick = {
+        when {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // 권한이 있으면 카메라 실행
+                takePictureLauncher.launch(null)
+            }
+            else -> {
+                // 권한 요청
+                permissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+
     Scaffold(
         containerColor = Color.White,
         bottomBar = {
@@ -137,7 +187,7 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
                 ) { page ->
                     OnboardingPageContent(
                         page = pages[page],
-                        onCameraClick = { takePictureLauncher.launch(null) },
+                        onCameraClick = onCameraClick,
                         onGalleryClick = { pickImageLauncher.launch("image/*") }
                     )
                 }
