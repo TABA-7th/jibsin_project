@@ -71,4 +71,12 @@ dependencies {
     // firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-storage-ktx")  // Firebase Storage
+    implementation("com.google.firebase:firebase-firestore-ktx") // Firebase Firestore
+
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("com.google.accompanist:accompanist-permissions:0.31.0-alpha")
 }
