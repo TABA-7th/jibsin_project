@@ -20,6 +20,14 @@ android {
 
     buildFeatures {
         compose = true // Compose 활성화
+        prefab = true  // OpenCV 사용
+    }
+
+    packaging {
+        resources {
+            excludes.add("META-INF/DEPENDENCIES")
+            pickFirsts.add("google/protobuf/type.proto")
+        }
     }
 
     buildTypes {
@@ -65,8 +73,8 @@ dependencies {
     implementation ("androidx.compose.material:material-icons-extended:1.5.4")
 
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.31.0-alpha")
-    implementation ("com.google.accompanist:accompanist-pager:0.31.0-alpha")
-    implementation ("com.google.accompanist:accompanist-pager-indicators:0.31.0-alpha")
+    implementation("com.google.accompanist:accompanist-pager:0.31.0-alpha")
+    implementation("com.google.accompanist:accompanist-pager-indicators:0.31.0-alpha")
 
     // firebase
     implementation(platform("com.google.firebase:firebase-bom:32.7.2"))
@@ -79,4 +87,7 @@ dependencies {
 
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("com.google.accompanist:accompanist-permissions:0.31.0-alpha")
+
+    // OpenCV
+    implementation("com.quickbirdstudios:opencv:4.5.3.0")
 }

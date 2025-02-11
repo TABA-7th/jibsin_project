@@ -77,7 +77,7 @@ fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImageFromUri(uri, context, "building_registry")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, "building_registry")
                     // TODO: Firestore에 문서 정보 저장
                     isLoading = false
                 } catch (e: Exception) {

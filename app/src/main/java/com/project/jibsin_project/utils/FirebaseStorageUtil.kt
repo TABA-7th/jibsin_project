@@ -11,11 +11,24 @@ import java.util.UUID
 
 class FirebaseStorageUtil {
     private val storage = Firebase.storage
-    private val storageRef = storage.reference.child("scanned_documents") // Root reference
+    private val storageRef = storage.reference.child("scanned_documents")
+    private val documentScanner = DocumentScanner()
 
     init {
-        // Storage 버킷 URL 설정 (필요한 경우)
         storage.maxUploadRetryTimeMillis = 50000
+    }
+
+    suspend fun uploadScannedImage(bitmap: Bitmap, documentType: String): String {
+        val scannedBitmap = documentScanner.scanDocument(bitmap)
+        return uploadImage(scannedBitmap, documentType)
+    }
+
+    suspend fun uploadScannedImageFromUri(uri: Uri, context: Context, documentType: String): String {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it)
+        } ?: throw IllegalStateException("Failed to read image file")
+
+        return uploadScannedImage(bitmap, documentType)
     }
 
     suspend fun uploadImage(bitmap: Bitmap, documentType: String): String {
@@ -27,18 +40,6 @@ class FirebaseStorageUtil {
         return try {
             imageRef.putBytes(data).await()
             imageRef.downloadUrl.await().toString()
-        } catch (e: Exception) {
-            throw e
-        }
-    }
-
-    suspend fun uploadImageFromUri(uri: Uri, context: Context, documentType: String): String {
-        val imageRef = storageRef.child("$documentType/${UUID.randomUUID()}.jpg")
-        return try {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                imageRef.putStream(stream).await()
-                imageRef.downloadUrl.await().toString()
-            } ?: throw IllegalStateException("Failed to read image file")
         } catch (e: Exception) {
             throw e
         }
