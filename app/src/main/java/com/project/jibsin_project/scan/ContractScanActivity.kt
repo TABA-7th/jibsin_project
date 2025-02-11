@@ -61,7 +61,6 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
             isLoading = true
             coroutineScope.launch {
                 try {
-                    // uploadImage 대신 uploadScannedImage 사용
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, "contract")
                     val document = ScannedDocument(
                         type = "contract",

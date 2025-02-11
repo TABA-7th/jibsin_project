@@ -87,7 +87,7 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
                         2 -> "contract"
                         else -> return@launch
                     }
-                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, documentType)
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, documentType)
                     val document = ScannedDocument(
                         type = documentType,
                         imageUrl = imageUrl,

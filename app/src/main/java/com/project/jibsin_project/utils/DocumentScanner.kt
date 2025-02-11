@@ -118,34 +118,62 @@ class DocumentScanner {
             Imgproc.CHAIN_APPROX_SIMPLE
         )
 
-        // 면적으로 필터링
-        val minArea = size.area() * 0.3  // 최소 면적 증가
-        val maxArea = size.area() * 0.95
+        // 면적 기준 더 엄격하게 조정
+        val minArea = size.area() * 0.4  // 0.3에서 0.4로 증가
+        val maxArea = size.area() * 0.98 // 0.95에서 0.98로 증가
 
-        val validContours = contours.filter { contour ->
-            val area = Imgproc.contourArea(contour)
-            area in minArea..maxArea
-        }.sortedByDescending { Imgproc.contourArea(it) }
+        val validContours = contours
+            .filter { contour ->
+                val area = Imgproc.contourArea(contour)
+                area in minArea..maxArea
+            }
+            .sortedByDescending { Imgproc.contourArea(it) }
 
         for (contour in validContours) {
             val peri = Imgproc.arcLength(MatOfPoint2f(*contour.toArray()), true)
             val approx = MatOfPoint2f()
-            Imgproc.approxPolyDP(MatOfPoint2f(*contour.toArray()), approx, 0.02 * peri, true)
+            Imgproc.approxPolyDP(
+                MatOfPoint2f(*contour.toArray()),
+                approx,
+                0.02 * peri,
+                true
+            )
 
-            if (approx.total() == 4L && isRectangleValid(approx.toArray())) {
-                return MatOfPoint(*approx.toArray())
+            if (approx.total() == 4L) {
+                val points = approx.toArray()
+                if (isRectangleValid(points)) {
+                    // 경계 약간 안쪽으로 조정
+                    val adjustedPoints = adjustPoints(points, size)
+                    return MatOfPoint(*adjustedPoints)
+                }
             }
         }
-
         return null
     }
 
-    private fun isRectangleValid(points: Array<Point>): Boolean {
-        // 각도 검사 (90도에 가까운지)
-        val angles = calculateAngles(points)
-        if (!angles.all { it in 80.0..100.0 }) return false
+    private fun adjustPoints(points: Array<Point>, size: Size): Array<Point> {
+        // 경계를 안쪽으로 약간 조정하는 상수
+        val padding = min(size.width, size.height) * 0.005
 
-        // 변의 길이 비율 검사 (너무 찌그러지지 않았는지)
+        return points.map { point ->
+            val x = when {
+                point.x < size.width / 2 -> point.x + padding  // 왼쪽 경계
+                else -> point.x - padding  // 오른쪽 경계
+            }
+            val y = when {
+                point.y < size.height / 2 -> point.y + padding  // 위쪽 경계
+                else -> point.y - padding  // 아래쪽 경계
+            }
+            Point(x, y)
+        }.toTypedArray()
+    }
+
+    private fun isRectangleValid(points: Array<Point>): Boolean {
+        // 각도 허용 범위를 더 엄격하게 조정
+        val angles = calculateAngles(points)
+        if (!angles.all { it in 85.0..95.0 }) return false  // 90도에 더 가깝게
+
+        // 변의 길이 비율 검사
         val edges = points.indices.map { i ->
             val next = (i + 1) % 4
             val dx = points[next].x - points[i].x
@@ -156,7 +184,8 @@ class DocumentScanner {
         val minEdge = edges.minOrNull() ?: return false
         val maxEdge = edges.maxOrNull() ?: return false
 
-        return maxEdge / minEdge < 1.5  // 가로세로 비율이 너무 다르지 않도록
+        // 비율 허용 범위를 더 엄격하게 조정
+        return maxEdge / minEdge < 1.2
     }
 
     private fun isRectangleReasonable(points: Array<Point>): Boolean {
@@ -196,20 +225,24 @@ class DocumentScanner {
         val points = contour.toArray()
         val sortedPoints = sortPoints(points)
 
-        // A4 비율 적용 (1:1.414)
-        val height = min(input.width(), input.height())
-        val width = (height / 1.414).toInt()
+        // 여백을 완전히 제거하기 위해 직접적인 크롭 적용
+        val width = input.width()
+        val height = input.height()
 
+        // 문서 영역만 정확하게 크롭
+        val margin = 0 // 여백 완전 제거
         val src = MatOfPoint2f(*sortedPoints)
         val dst = MatOfPoint2f(
-            Point(0.0, 0.0),
-            Point(width.toDouble(), 0.0),
-            Point(width.toDouble(), height.toDouble()),
-            Point(0.0, height.toDouble())
+            Point(margin.toDouble(), margin.toDouble()),
+            Point((width - margin).toDouble(), margin.toDouble()),
+            Point((width - margin).toDouble(), (height - margin).toDouble()),
+            Point(margin.toDouble(), (height - margin).toDouble())
         )
 
         val transform = Imgproc.getPerspectiveTransform(src, dst)
         val result = Mat()
+
+        // 결과 이미지 크기를 문서 크기에 맞춤
         Imgproc.warpPerspective(
             input,
             result,
@@ -217,7 +250,9 @@ class DocumentScanner {
             Size(width.toDouble(), height.toDouble())
         )
 
-        return result
+        // 추가적인 크롭 적용
+        val cropRect = Rect(margin, margin, width - (2 * margin), height - (2 * margin))
+        return Mat(result, cropRect)
     }
 
     private fun enhanceImage(input: Mat): Mat {
