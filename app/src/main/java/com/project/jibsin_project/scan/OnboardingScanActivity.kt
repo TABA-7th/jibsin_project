@@ -69,7 +69,7 @@ fun OnboardingScanScreen(
     val pagerState = rememberPagerState()
     var hasCameraPermission by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    var isLoading by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     var currentPage by remember { mutableStateOf(0) }
     val pages = listOf(
         OnboardingPage("건축물대장", "건축물대장을 스캔하여 분석하세요.", R.drawable.ic_scan),
@@ -100,7 +100,7 @@ fun OnboardingScanScreen(
             return
         }
 
-        showProgress = true
+        isUploading = true
         try {
             val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, type)
             val document = ScannedDocument(
@@ -117,23 +117,13 @@ fun OnboardingScanScreen(
             if (pagerState.currentPage < 2) {
                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
             }
-            // 모든 문서가 업로드되었으면 분석 시작
-            else if (documentUploadManager.isReadyForAnalysis()) {
-                val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
-
-                // 분석 결과 화면으로 이동
-                val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                    putExtra("analysisId", analysisId)
-                }
-                context.startActivity(intent)
-            }
         } catch (e: Exception) {
             errorMessage = when (e) {
                 is UploadError -> e.toUserMessage()
                 else -> "업로드 중 오류가 발생했습니다."
             }
         } finally {
-            showProgress = false
+            isUploading = false
         }
     }
 
@@ -147,8 +137,11 @@ fun OnboardingScanScreen(
                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
             }
         }
-        // 모든 문서가 업로드되었으면 분석 시작
-        else if (documentUploadManager.isReadyForAnalysis()) {
+    }
+
+    // 완료 버튼 클릭 처리
+    fun onCompleteClick() {
+        if (documentUploadManager.isReadyForAnalysis()) {
             coroutineScope.launch {
                 try {
                     showProgress = true
@@ -165,6 +158,8 @@ fun OnboardingScanScreen(
                     showProgress = false
                 }
             }
+        } else {
+            errorMessage = "모든 문서를 업로드해주세요."
         }
     }
 
@@ -182,6 +177,7 @@ fun OnboardingScanScreen(
         if (bitmap != null) {
             coroutineScope.launch {
                 try {
+                    isUploading = true
                     val documentType = when (pagerState.currentPage) {
                         0 -> "building_registry"
                         1 -> "registry_document"
@@ -198,6 +194,8 @@ fun OnboardingScanScreen(
                     onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isUploading = false
                 }
             }
         }
@@ -210,6 +208,7 @@ fun OnboardingScanScreen(
         if (uri != null) {
             coroutineScope.launch {
                 try {
+                    isUploading = true
                     val documentType = when (pagerState.currentPage) {
                         0 -> "building_registry"
                         1 -> "registry_document"
@@ -226,6 +225,8 @@ fun OnboardingScanScreen(
                     onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isUploading = false
                 }
             }
         }
@@ -307,24 +308,31 @@ fun OnboardingScanScreen(
                         }
                     } else {
                         Button(
-                            onClick = {
-                                // 완료 동작 처리
-                            },
+                            onClick = { onCompleteClick() },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)),
                             modifier = Modifier.padding(16.dp)
                         ) {
-                            Text("완료", color = Color.White, fontSize = 16.sp)
+                            Text("분석 시작하기", color = Color.White, fontSize = 16.sp)
                         }
                     }
                 }
             }
 
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color(0xFF253F5A)
-                )
+            // 업로드 중 로딩 인디케이터
+            if (isUploading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF253F5A),
+                        modifier = Modifier.size(48.dp),
+                        strokeWidth = 4.dp
+                    )
+                }
             }
 
             errorMessage?.let {
