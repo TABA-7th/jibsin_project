@@ -40,6 +40,7 @@ import coil.compose.AsyncImage
 import com.google.accompanist.pager.*
 import com.project.jibsin_project.utils.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class OnboardingScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -122,7 +123,7 @@ fun OnboardingScanScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 이전 버튼
+                // 이전 버튼 - 첫 페이지가 아닐 때만 표시
                 if (pagerState.currentPage > 0) {
                     TextButton(
                         onClick = {
@@ -134,6 +135,7 @@ fun OnboardingScanScreen(
                         Text("이전", color = Color(0xFF253F5A))
                     }
                 } else {
+                    // 첫 페이지일 때는 빈 공간
                     Spacer(Modifier.width(64.dp))
                 }
 
@@ -160,18 +162,23 @@ fun OnboardingScanScreen(
 
                 // 다음/분석 버튼
                 if (pagerState.currentPage < pages.size - 1) {
-                    if (hasDocuments[pages[pagerState.currentPage].first] == true) {
-                        TextButton(
-                            onClick = {
+                    TextButton(
+                        onClick = {
+                            if (hasDocuments[pages[pagerState.currentPage].first] == true) {
                                 scope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 }
                             }
-                        ) {
-                            Text("다음", color = Color(0xFF253F5A))
-                        }
-                    } else {
-                        Spacer(Modifier.width(64.dp))
+                        },
+                        enabled = hasDocuments[pages[pagerState.currentPage].first] == true
+                    ) {
+                        Text(
+                            "다음",
+                            color = if (hasDocuments[pages[pagerState.currentPage].first] == true)
+                                Color(0xFF253F5A)
+                            else
+                                Color(0xFFBDBDBD)
+                        )
                     }
                 } else {
                     Button(
@@ -247,13 +254,21 @@ fun DocumentUploadScreen(
     // 문서 상태 관찰
     val documentStatus by documentUploadManager.documentStatus.collectAsState()
     val uploadedDocuments = remember(documentStatus) {
-        documentStatus.documentSets[documentType]?.mapIndexed { index, id ->
-            DocumentPreview(
-                id = id,
-                imageUrl = "", // TODO: 이미지 URL을 Firebase에서 가져오도록 수정
-                pageNumber = index + 1
-            )
-        } ?: emptyList()
+        val documents = documentStatus.documentSets[documentType] ?: emptyList()
+        documents.mapIndexed { index, id ->
+            try {
+                val doc = runBlocking {
+                    firestoreUtil.getDocument(id)
+                }
+                DocumentPreview(
+                    id = id,
+                    imageUrl = doc?.getString("imageUrl") ?: "",
+                    pageNumber = index + 1
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }.filterNotNull()
     }
 
     // 카메라 실행 런처
@@ -504,9 +519,9 @@ fun DocumentPreviewItem(
                 .align(Alignment.TopStart)
                 .background(
                     color = Color(0x88000000),
-                    shape = RoundedCornerShape(bottomEnd = 8.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
-                .padding(4.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             color = Color.White,
             fontSize = 12.sp
         )
@@ -517,15 +532,11 @@ fun DocumentPreviewItem(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(24.dp)
-                .background(
-                    color = Color(0x88000000),
-                    shape = CircleShape
-                )
         ) {
             Icon(
                 Icons.Default.Close,
                 contentDescription = "Delete",
-                tint = Color.White,
+                tint = Color.Black,
                 modifier = Modifier.size(16.dp)
             )
         }

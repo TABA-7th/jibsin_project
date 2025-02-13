@@ -1,6 +1,7 @@
 package com.project.jibsin_project.utils
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
@@ -56,15 +57,57 @@ class FirestoreUtil {
         }
     }
 
-    suspend fun getDocumentGroup(groupId: String): DocumentGroup? {
+    suspend fun getDocument(documentId: String): DocumentSnapshot? {
         return try {
-            val doc = db.collection("document_groups")
-                .document(groupId)
+            db.collection("scanned_documents")
+                .document(documentId)
                 .get()
                 .await()
-            doc.toObject(DocumentGroup::class.java)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    suspend fun updateAnalysisResult(documentId: String, result: Map<String, Any>) {
+        try {
+            db.collection("scanned_documents")
+                .document(documentId)
+                .update(mapOf(
+                    "status" to "completed",
+                    "result" to result
+                ))
+                .await()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 문서 그룹의 모든 문서 가져오기
+    suspend fun getDocumentsInGroup(groupId: String): List<ScannedDocument> {
+        return try {
+            db.collection("scanned_documents")
+                .whereEqualTo("groupId", groupId)
+                .get()
+                .await()
+                .documents
+                .mapNotNull { it.toObject(ScannedDocument::class.java) }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // 특정 타입의 문서들 가져오기
+    suspend fun getDocumentsByType(groupId: String, type: String): List<ScannedDocument> {
+        return try {
+            db.collection("scanned_documents")
+                .whereEqualTo("groupId", groupId)
+                .whereEqualTo("type", type)
+                .get()
+                .await()
+                .documents
+                .mapNotNull { it.toObject(ScannedDocument::class.java) }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 }
