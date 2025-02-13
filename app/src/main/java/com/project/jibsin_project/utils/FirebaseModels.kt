@@ -8,9 +8,11 @@ import kotlinx.coroutines.tasks.await
 data class ScannedDocument(
     val type: String,
     val imageUrl: String,
-    val uploadDate: Timestamp = Timestamp.now(),
+    val uploadDate: com.google.firebase.Timestamp = com.google.firebase.Timestamp.now(),
     val status: String = "scanning",
-    val userId: String,  // 실제 구현시 로그인한 사용자 ID를 사용
+    val userId: String,
+    val groupId: String,  // 문서 그룹 ID 추가
+    val pageNumber: Int,  // 페이지 번호 추가
     val result: Map<String, Any>? = null
 )
 
@@ -26,17 +28,43 @@ class FirestoreUtil {
         }
     }
 
-    suspend fun updateAnalysisResult(documentId: String, result: Map<String, Any>) {
+    suspend fun createDocumentGroup(groupId: String, userId: String): DocumentGroup {
+        val group = DocumentGroup(
+            groupId = groupId,
+            userId = userId
+        )
+
         try {
-            db.collection("scanned_documents")
-                .document(documentId)
-                .update(mapOf(
-                    "status" to "completed",
-                    "result" to result
-                ))
+            db.collection("document_groups")
+                .document(groupId)
+                .set(group)
+                .await()
+            return group
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    suspend fun updateDocumentGroup(groupId: String, updates: Map<String, Any>) {
+        try {
+            db.collection("document_groups")
+                .document(groupId)
+                .update(updates)
                 .await()
         } catch (e: Exception) {
             throw e
+        }
+    }
+
+    suspend fun getDocumentGroup(groupId: String): DocumentGroup? {
+        return try {
+            val doc = db.collection("document_groups")
+                .document(groupId)
+                .get()
+                .await()
+            doc.toObject(DocumentGroup::class.java)
+        } catch (e: Exception) {
+            null
         }
     }
 }

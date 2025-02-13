@@ -26,6 +26,7 @@ import com.project.jibsin_project.utils.FirebaseStorageUtil
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.ScannedDocument
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class ContractScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -47,6 +48,10 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // 각 스캔 세션에 대한 고유 그룹 ID 생성
+    val groupId = remember { UUID.randomUUID().toString() }
+    var currentPage by remember { mutableStateOf(1) }
+
     val hasPermission = remember {
         ContextCompat.checkSelfPermission(
             context,
@@ -61,18 +66,27 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, "contract")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(
+                        bitmap = bitmap,
+                        documentType = "contract",
+                        groupId = groupId,
+                        pageNumber = currentPage
+                    )
                     val document = ScannedDocument(
                         type = "contract",
                         imageUrl = imageUrl,
-                        userId = "test_user"
+                        userId = "test_user",
+                        groupId = groupId,
+                        pageNumber = currentPage
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
+                    currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                         putExtra("documentId", documentId)
                         putExtra("documentType", "contract")
+                        putExtra("groupId", groupId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -90,19 +104,28 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, "contract")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
+                        uri = uri,
+                        context = context,
+                        documentType = "contract",
+                        groupId = groupId,
+                        pageNumber = currentPage
+                    )
                     val document = ScannedDocument(
                         type = "contract",
                         imageUrl = imageUrl,
-                        userId = "test_user" // TODO: 실제 사용자 ID로 교체
+                        userId = "test_user",
+                        groupId = groupId,
+                        pageNumber = currentPage
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
+                    currentPage++
                     isLoading = false
 
-                    // 분석 결과 화면으로 이동
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                         putExtra("documentId", documentId)
                         putExtra("documentType", "contract")
+                        putExtra("groupId", groupId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {

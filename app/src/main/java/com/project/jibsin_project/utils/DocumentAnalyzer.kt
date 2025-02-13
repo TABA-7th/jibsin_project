@@ -6,12 +6,19 @@ import kotlinx.coroutines.tasks.await
 class DocumentAnalyzer {
     private val firestore = FirebaseFirestore.getInstance()
 
-    suspend fun startAnalysis(documents: DocumentStatus): String {
+    suspend fun startAnalysis(documents: DocumentGroup): String {
+        // DocumentGroup을 DocumentStatus로 변환
+        val documentStatus = DocumentStatus(
+            buildingRegistry = documents.documentSets["building_registry"]?.firstOrNull(),
+            registryDocument = documents.documentSets["registry_document"]?.firstOrNull(),
+            contract = documents.documentSets["contract"]?.firstOrNull()
+        )
+
         // 분석 요청 생성
         val analysisRequest = hashMapOf(
-            "buildingRegistryId" to documents.buildingRegistry,
-            "registryDocumentId" to documents.registryDocument,
-            "contractId" to documents.contract,
+            "buildingRegistryId" to documentStatus.buildingRegistry,
+            "registryDocumentId" to documentStatus.registryDocument,
+            "contractId" to documentStatus.contract,
             "status" to "pending",
             "createdAt" to System.currentTimeMillis()
         )

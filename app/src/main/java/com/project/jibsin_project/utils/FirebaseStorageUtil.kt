@@ -19,30 +19,44 @@ class FirebaseStorageUtil {
         storage.maxUploadRetryTimeMillis = 50000
     }
 
-    suspend fun uploadScannedImage(bitmap: Bitmap, documentType: String): String {
-        // 스캔 처리
+    suspend fun uploadScannedImage(
+        bitmap: Bitmap,
+        documentType: String,
+        groupId: String = UUID.randomUUID().toString(),
+        pageNumber: Int = 1
+    ): String {
         val scannedBitmap = documentScanner.scanDocument(bitmap)
-
-        // 추가적인 크롭 처리
         val croppedBitmap = cropBitmapEdges(scannedBitmap)
-
-        return uploadImage(croppedBitmap, documentType)
+        return uploadImage(croppedBitmap, documentType, groupId, pageNumber)
     }
 
-    suspend fun uploadScannedImageFromUri(uri: Uri, context: Context, documentType: String): String {
+    suspend fun uploadScannedImageFromUri(
+        uri: Uri,
+        context: Context,
+        documentType: String,
+        groupId: String = UUID.randomUUID().toString(),
+        pageNumber: Int = 1
+    ): String {
         val bitmap = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it)
         } ?: throw IllegalStateException("Failed to read image file")
 
-        return uploadScannedImage(bitmap, documentType)
+        return uploadScannedImage(bitmap, documentType, groupId, pageNumber)
     }
 
-    private suspend fun uploadImage(bitmap: Bitmap, documentType: String): String {
+    private suspend fun uploadImage(
+        bitmap: Bitmap,
+        documentType: String,
+        groupId: String,
+        pageNumber: Int
+    ): String {
         val baos = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
         val data = baos.toByteArray()
 
-        val imageRef = storageRef.child("$documentType/${UUID.randomUUID()}.jpg")
+        val fileName = "${documentType}_page${pageNumber}.jpg"
+        val imageRef = storageRef.child("$groupId/$fileName")
+
         return try {
             imageRef.putBytes(data).await()
             imageRef.downloadUrl.await().toString()
