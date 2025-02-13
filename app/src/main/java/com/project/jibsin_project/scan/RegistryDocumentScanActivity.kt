@@ -61,7 +61,7 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, "registry_document")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, "registry_document")
                     val document = ScannedDocument(
                         type = "registry_document",
                         imageUrl = imageUrl,
@@ -90,7 +90,7 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImageFromUri(uri, context, "registry_document")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, "registry_document")
                     val document = ScannedDocument(
                         type = "registry_document",
                         imageUrl = imageUrl,

@@ -61,16 +61,15 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, "contract")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, "contract")
                     val document = ScannedDocument(
                         type = "contract",
                         imageUrl = imageUrl,
-                        userId = "test_user" // TODO: 실제 사용자 ID로 교체
+                        userId = "test_user"
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
                     isLoading = false
 
-                    // 분석 결과 화면으로 이동
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                         putExtra("documentId", documentId)
                         putExtra("documentType", "contract")
@@ -91,7 +90,7 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImageFromUri(uri, context, "contract")
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, "contract")
                     val document = ScannedDocument(
                         type = "contract",
                         imageUrl = imageUrl,

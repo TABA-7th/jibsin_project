@@ -31,10 +31,16 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.accompanist.pager.*
 import com.project.jibsin_project.R
+import com.project.jibsin_project.utils.DocumentAnalyzer
+import com.project.jibsin_project.utils.DocumentUploadManager
+import com.project.jibsin_project.utils.ErrorDialog
 import com.project.jibsin_project.utils.FirebaseStorageUtil
 import com.project.jibsin_project.utils.FirestoreUtil
+import com.project.jibsin_project.utils.ProgressDialog
 import com.project.jibsin_project.utils.ScannedDocument
+import com.project.jibsin_project.utils.UploadError
 import com.project.jibsin_project.utils.rememberCameraPermissionState
+import com.project.jibsin_project.utils.toUserMessage
 import kotlinx.coroutines.launch
 
 class OnboardingScanActivity : ComponentActivity() {
@@ -51,20 +57,111 @@ class OnboardingScanActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPagerApi::class)
 @Composable
-fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
+fun OnboardingScanScreen(
+    firebaseStorageUtil: FirebaseStorageUtil,
+    firestoreUtil: FirestoreUtil,
+    documentUploadManager: DocumentUploadManager = DocumentUploadManager.getInstance()
+) {
     val context = LocalContext.current
-    val activity = LocalContext.current as ComponentActivity
+    val scope = rememberCoroutineScope()
+    var showProgress by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val pagerState = rememberPagerState()
     var hasCameraPermission by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val pagerState = rememberPagerState()
+    var isUploading by remember { mutableStateOf(false) }
+    var currentPage by remember { mutableStateOf(0) }
     val pages = listOf(
         OnboardingPage("건축물대장", "건축물대장을 스캔하여 분석하세요.", R.drawable.ic_scan),
         OnboardingPage("등기부등본", "등기부등본을 스캔하여 분석하세요.", R.drawable.ic_scan),
         OnboardingPage("계약서", "계약서를 스캔하여 분석하세요.", R.drawable.ic_scan)
     )
+
+    // 문서 업로드 상태 관찰
+    val documentStatus by documentUploadManager.documentStatus.collectAsState()
+
+    // 에러 다이얼로그
+    errorMessage?.let { message ->
+        ErrorDialog(
+            message = message,
+            onDismiss = { errorMessage = null }
+        )
+    }
+
+    // 진행 상태 다이얼로그
+    if (showProgress) {
+        ProgressDialog()
+    }
+
+    // 이미지 업로드 처리
+    suspend fun handleImageUpload(bitmap: Bitmap?, type: String) {
+        if (bitmap == null) {
+            errorMessage = "이미지를 가져올 수 없습니다."
+            return
+        }
+
+        isUploading = true
+        try {
+            val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, type)
+            val document = ScannedDocument(
+                type = type,
+                imageUrl = imageUrl,
+                userId = "test_user" // TODO: 실제 사용자 ID로 교체
+            )
+            val documentId = firestoreUtil.saveScannedDocument(document)
+
+            // 문서 상태 업데이트
+            documentUploadManager.updateDocument(type, documentId)
+
+            // 마지막 문서가 아니면 다음 페이지로 이동
+            if (pagerState.currentPage < 2) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        } catch (e: Exception) {
+            errorMessage = when (e) {
+                is UploadError -> e.toUserMessage()
+                else -> "업로드 중 오류가 발생했습니다."
+            }
+        } finally {
+            isUploading = false
+        }
+    }
+
+    // 문서 업로드 후 처리
+    fun onDocumentUploaded(documentId: String, type: String) {
+        documentUploadManager.updateDocument(type, documentId)
+
+        // 다음 페이지로 자동 이동
+        if (pagerState.currentPage < 2) {
+            coroutineScope.launch {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        }
+    }
+
+    // 완료 버튼 클릭 처리
+    fun onCompleteClick() {
+        if (documentUploadManager.isReadyForAnalysis()) {
+            coroutineScope.launch {
+                try {
+                    showProgress = true
+                    val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
+
+                    // 분석 결과 화면으로 이동
+                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                        putExtra("analysisId", analysisId)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    errorMessage = "분석 요청 실패: ${e.message}"
+                } finally {
+                    showProgress = false
+                }
+            }
+        } else {
+            errorMessage = "모든 문서를 업로드해주세요."
+        }
+    }
 
     // 카메라 권한 요청 런처
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -78,32 +175,27 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
         if (bitmap != null) {
-            isLoading = true
             coroutineScope.launch {
                 try {
+                    isUploading = true
                     val documentType = when (pagerState.currentPage) {
                         0 -> "building_registry"
                         1 -> "registry_document"
                         2 -> "contract"
                         else -> return@launch
                     }
-                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, documentType)
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, documentType)
                     val document = ScannedDocument(
                         type = documentType,
                         imageUrl = imageUrl,
                         userId = "test_user"
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
-                    isLoading = false
-
-                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", documentType)
-                    }
-                    context.startActivity(intent)
+                    onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
-                    isLoading = false
                     errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isUploading = false
                 }
             }
         }
@@ -114,32 +206,27 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            isLoading = true
             coroutineScope.launch {
                 try {
+                    isUploading = true
                     val documentType = when (pagerState.currentPage) {
                         0 -> "building_registry"
                         1 -> "registry_document"
                         2 -> "contract"
                         else -> return@launch
                     }
-                    val imageUrl = firebaseStorageUtil.uploadImageFromUri(uri, context, documentType)
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, documentType)
                     val document = ScannedDocument(
                         type = documentType,
                         imageUrl = imageUrl,
                         userId = "test_user"
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
-                    isLoading = false
-
-                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", documentType)
-                    }
-                    context.startActivity(intent)
+                    onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
-                    isLoading = false
                     errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isUploading = false
                 }
             }
         }
@@ -215,30 +302,55 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
                             },
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(2.dp, Color(0xFF253F5A)),
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
                             Text("다음", color = Color.Black, fontSize = 16.sp)
                         }
                     } else {
+                        val isAnalysisReady = documentUploadManager.isReadyForAnalysis()
+                        Spacer(modifier = Modifier.height(8.dp))
                         Button(
-                            onClick = {
-                                // 완료 동작 처리
-                            },
+                            onClick = { onCompleteClick() },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)),
-                            modifier = Modifier.padding(16.dp)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isAnalysisReady) Color(0xFF253F5A) else Color(0xFFE0E0E0),
+                                disabledContainerColor = Color(0xFFE0E0E0)
+                            ),
+                            enabled = isAnalysisReady,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
-                            Text("완료", color = Color.White, fontSize = 16.sp)
+                            Text(
+                                "분석 시작",
+                                color = if (isAnalysisReady) Color.White else Color(0xFF9E9E9E),
+                                fontSize = 16.sp
+                            )
+                        }
+                        if (!isAnalysisReady) {
+                            Text(
+                                "모든 문서를 업로드해주세요",
+                                color = Color(0xFF9E9E9E),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
                     }
                 }
             }
 
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color(0xFF253F5A)
-                )
+            // 업로드 중 로딩 인디케이터
+            if (isUploading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFF253F5A),
+                        modifier = Modifier.size(48.dp),
+                        strokeWidth = 4.dp
+                    )
+                }
             }
 
             errorMessage?.let {
