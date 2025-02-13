@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -65,38 +67,17 @@ fun OnboardingScanScreen(
     val pagerState = rememberPagerState()
 
     val pages = listOf(
-        Triple("building_registry", "건축물대장", "건축물대장을 스캔하여 분석하세요."),
-        Triple("registry_document", "등기부등본", "등기부등본을 스캔하여 분석하세요."),
-        Triple("contract", "계약서", "계약서를 스캔하여 분석하세요.")
+        Triple("building_registry", "건축물대장", "건축물대장을 업로드하세요."),
+        Triple("registry_document", "등기부등본", "등기부등본을 업로드하세요."),
+        Triple("contract", "계약서", "계약서를 업로드하세요.")
     )
 
     // 문서 업로드 상태 관찰
     val documentStatus by documentUploadManager.documentStatus.collectAsState()
 
-    // 완료 버튼 클릭 처리
-    fun onCompleteClick() {
-        if (documentUploadManager.isReadyForAnalysis()) {
-            scope.launch {
-                try {
-                    showProgress = true
-                    val groupId = documentUploadManager.getCurrentGroupId()
-                    val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
-
-                    // 분석 결과 화면으로 이동
-                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("analysisId", analysisId)
-                        putExtra("groupId", groupId)
-                    }
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    errorMessage = "분석 요청 실패: ${e.message}"
-                } finally {
-                    showProgress = false
-                }
-            }
-        } else {
-            errorMessage = "모든 문서를 하나 이상 업로드해주세요."
-        }
+    // 각 페이지별 문서 업로드 여부 확인
+    val hasDocuments = remember(documentStatus) {
+        documentStatus.documentSets.mapValues { it.value.isNotEmpty() }
     }
 
     Scaffold(
@@ -129,13 +110,7 @@ fun OnboardingScanScreen(
                     documentUploadManager = documentUploadManager,
                     firebaseStorageUtil = firebaseStorageUtil,
                     firestoreUtil = firestoreUtil,
-                    onUploadComplete = {
-                        scope.launch {
-                            if (page < pages.size - 1) {
-                                pagerState.animateScrollToPage(page + 1)
-                            }
-                        }
-                    }
+                    onUploadComplete = {}  // 완료 버튼 제거로 인해 빈 람다로 설정
                 )
             }
 
@@ -183,20 +158,43 @@ fun OnboardingScanScreen(
                     }
                 }
 
-                // 다음/완료 버튼
+                // 다음/분석 버튼
                 if (pagerState.currentPage < pages.size - 1) {
-                    TextButton(
-                        onClick = {
-                            scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                    if (hasDocuments[pages[pagerState.currentPage].first] == true) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
                             }
+                        ) {
+                            Text("다음", color = Color(0xFF253F5A))
                         }
-                    ) {
-                        Text("다음", color = Color(0xFF253F5A))
+                    } else {
+                        Spacer(Modifier.width(64.dp))
                     }
                 } else {
                     Button(
-                        onClick = { onCompleteClick() },
+                        onClick = {
+                            if (documentUploadManager.isReadyForAnalysis()) {
+                                scope.launch {
+                                    try {
+                                        showProgress = true
+                                        val groupId = documentUploadManager.getCurrentGroupId()
+                                        val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
+                                        val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                                            putExtra("analysisId", analysisId)
+                                            putExtra("groupId", groupId)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        errorMessage = "분석 요청 실패: ${e.message}"
+                                    } finally {
+                                        showProgress = false
+                                    }
+                                }
+                            }
+                        },
                         enabled = documentUploadManager.isReadyForAnalysis(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF253F5A),
@@ -204,7 +202,7 @@ fun OnboardingScanScreen(
                         )
                     ) {
                         Text(
-                            "분석 시작",
+                            "분석",
                             color = if (documentUploadManager.isReadyForAnalysis())
                                 Color.White
                             else
@@ -240,15 +238,70 @@ fun DocumentUploadScreen(
     firestoreUtil: FirestoreUtil,
     onUploadComplete: () -> Unit
 ) {
-    var uploadedDocuments by remember { mutableStateOf<List<DocumentPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // 이미지 선택 런처
-    val pickMultipleImages = rememberLauncherForActivityResult(
+    // 문서 상태 관찰
+    val documentStatus by documentUploadManager.documentStatus.collectAsState()
+    val uploadedDocuments = remember(documentStatus) {
+        documentStatus.documentSets[documentType]?.mapIndexed { index, id ->
+            DocumentPreview(
+                id = id,
+                imageUrl = "", // TODO: 이미지 URL을 Firebase에서 가져오도록 수정
+                pageNumber = index + 1
+            )
+        } ?: emptyList()
+    }
+
+    // 카메라 실행 런처
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            coroutineScope.launch {
+                isLoading = true
+                try {
+                    val groupId = documentUploadManager.getCurrentGroupId()
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(
+                        bitmap = bitmap,
+                        documentType = documentType,
+                        groupId = groupId,
+                        pageNumber = uploadedDocuments.size + 1
+                    )
+
+                    val document = ScannedDocument(
+                        type = documentType,
+                        imageUrl = imageUrl,
+                        userId = "test_user",
+                        groupId = groupId,
+                        pageNumber = uploadedDocuments.size + 1
+                    )
+
+                    val documentId = firestoreUtil.saveScannedDocument(document)
+                    documentUploadManager.addDocument(documentType, documentId)
+                } catch (e: Exception) {
+                    errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
+        }
+    }
+
+    // 카메라 권한 체크
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            takePictureLauncher.launch(null)
+        }
+    }
+
+    // 갤러리 실행 런처
+    val pickImageLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
@@ -256,7 +309,7 @@ fun DocumentUploadScreen(
                 isLoading = true
                 try {
                     val groupId = documentUploadManager.getCurrentGroupId()
-                    val newDocuments = uris.mapIndexed { index, uri ->
+                    uris.forEachIndexed { index, uri ->
                         val bitmap = context.contentResolver.openInputStream(uri)?.use {
                             BitmapFactory.decodeStream(it)
                         } ?: throw IllegalStateException("Failed to read image")
@@ -271,20 +324,14 @@ fun DocumentUploadScreen(
                         val document = ScannedDocument(
                             type = documentType,
                             imageUrl = imageUrl,
-                            userId = "test_user", // TODO: 실제 사용자 ID로 교체
+                            userId = "test_user",
                             groupId = groupId,
                             pageNumber = uploadedDocuments.size + index + 1
                         )
 
                         val documentId = firestoreUtil.saveScannedDocument(document)
-                        DocumentPreview(documentId, imageUrl, uploadedDocuments.size + index + 1)
+                        documentUploadManager.addDocument(documentType, documentId)
                     }
-
-                    uploadedDocuments = uploadedDocuments + newDocuments
-                    documentUploadManager.updateDocuments(
-                        documentType,
-                        uploadedDocuments.map { it.id }
-                    )
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
                 } finally {
@@ -327,15 +374,12 @@ fun DocumentUploadScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uploadedDocuments) { document ->
+                items(uploadedDocuments.size) { index ->
+                    val document = uploadedDocuments[index]
                     DocumentPreviewItem(
                         document = document,
                         onDelete = {
-                            uploadedDocuments = uploadedDocuments - document
-                            documentUploadManager.updateDocuments(
-                                documentType,
-                                uploadedDocuments.map { it.id }
-                            )
+                            documentUploadManager.removeDocument(documentType, document.id)
                         }
                     )
                 }
@@ -351,34 +395,63 @@ fun DocumentUploadScreen(
             }
         }
 
-        // 업로드 버튼
-        Button(
-            onClick = { pickMultipleImages.launch("image/*") },
+        // 문서 추가 버튼들
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF253F5A)
-            ),
-            shape = RoundedCornerShape(8.dp)
+                .padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("문서 추가하기", color = Color.White)
-        }
-
-        // 완료 버튼
-        if (uploadedDocuments.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            // 카메라 버튼
             Button(
-                onClick = onUploadComplete,
+                onClick = {
+                    when {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED -> {
+                            takePictureLauncher.launch(null)
+                        }
+                        else -> {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }
+                },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .height(50.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4CAF50)
+                    containerColor = Color(0xFF253F5A)
                 ),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Text("완료", color = Color.White)
+                Icon(
+                    Icons.Default.Camera,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("카메라", color = Color.White)
+            }
+
+            // 갤러리 버튼
+            Button(
+                onClick = { pickImageLauncher.launch("image/*") },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF253F5A)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.PhotoLibrary,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("갤러리", color = Color.White)
             }
         }
     }
