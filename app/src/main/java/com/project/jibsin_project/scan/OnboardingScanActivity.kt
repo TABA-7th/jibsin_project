@@ -302,18 +302,36 @@ fun OnboardingScanScreen(
                             },
                             shape = RoundedCornerShape(8.dp),
                             border = BorderStroke(2.dp, Color(0xFF253F5A)),
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
                             Text("다음", color = Color.Black, fontSize = 16.sp)
                         }
                     } else {
+                        val isAnalysisReady = documentUploadManager.isReadyForAnalysis()
+                        Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = { onCompleteClick() },
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF253F5A)),
-                            modifier = Modifier.padding(16.dp)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isAnalysisReady) Color(0xFF253F5A) else Color(0xFFE0E0E0),
+                                disabledContainerColor = Color(0xFFE0E0E0)
+                            ),
+                            enabled = isAnalysisReady,
+                            modifier = Modifier.padding(horizontal = 16.dp)
                         ) {
-                            Text("분석 시작하기", color = Color.White, fontSize = 16.sp)
+                            Text(
+                                "분석 시작",
+                                color = if (isAnalysisReady) Color.White else Color(0xFF9E9E9E),
+                                fontSize = 16.sp
+                            )
+                        }
+                        if (!isAnalysisReady) {
+                            Text(
+                                "모든 문서를 업로드해주세요",
+                                color = Color(0xFF9E9E9E),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
                     }
                 }
