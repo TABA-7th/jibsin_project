@@ -7,16 +7,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import com.google.firebase.FirebaseApp
 import com.project.jibsin_project.Home.HomeScreen
 import com.project.jibsin_project.login.LoginScreen
 import com.project.jibsin_project.login.SignUpScreen
 import com.project.jibsin_project.utils.DocumentUploadManager
+import com.project.jibsin_project.utils.FirebaseStorageUtil
+import com.project.jibsin_project.utils.FirestoreUtil
 
 class MainActivity : ComponentActivity() {
     private val documentUploadManager = DocumentUploadManager.getInstance()
+    private val firebaseStorageUtil = FirebaseStorageUtil()
+    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Firebase 초기화
+        FirebaseApp.initializeApp(this)
+
         setContent {
             MyApp() // MyApp에서 상태바 색상과 UI를 설정
         }

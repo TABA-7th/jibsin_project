@@ -31,10 +31,16 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.accompanist.pager.*
 import com.project.jibsin_project.R
+import com.project.jibsin_project.utils.DocumentAnalyzer
+import com.project.jibsin_project.utils.DocumentUploadManager
+import com.project.jibsin_project.utils.ErrorDialog
 import com.project.jibsin_project.utils.FirebaseStorageUtil
 import com.project.jibsin_project.utils.FirestoreUtil
+import com.project.jibsin_project.utils.ProgressDialog
 import com.project.jibsin_project.utils.ScannedDocument
+import com.project.jibsin_project.utils.UploadError
 import com.project.jibsin_project.utils.rememberCameraPermissionState
+import com.project.jibsin_project.utils.toUserMessage
 import kotlinx.coroutines.launch
 
 class OnboardingScanActivity : ComponentActivity() {
@@ -51,20 +57,116 @@ class OnboardingScanActivity : ComponentActivity() {
 
 @OptIn(ExperimentalPagerApi::class)
 @Composable
-fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
+fun OnboardingScanScreen(
+    firebaseStorageUtil: FirebaseStorageUtil,
+    firestoreUtil: FirestoreUtil,
+    documentUploadManager: DocumentUploadManager = DocumentUploadManager.getInstance()
+) {
     val context = LocalContext.current
-    val activity = LocalContext.current as ComponentActivity
+    val scope = rememberCoroutineScope()
+    var showProgress by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val pagerState = rememberPagerState()
     var hasCameraPermission by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val pagerState = rememberPagerState()
+    var currentPage by remember { mutableStateOf(0) }
     val pages = listOf(
         OnboardingPage("건축물대장", "건축물대장을 스캔하여 분석하세요.", R.drawable.ic_scan),
         OnboardingPage("등기부등본", "등기부등본을 스캔하여 분석하세요.", R.drawable.ic_scan),
         OnboardingPage("계약서", "계약서를 스캔하여 분석하세요.", R.drawable.ic_scan)
     )
+
+    // 문서 업로드 상태 관찰
+    val documentStatus by documentUploadManager.documentStatus.collectAsState()
+
+    // 에러 다이얼로그
+    errorMessage?.let { message ->
+        ErrorDialog(
+            message = message,
+            onDismiss = { errorMessage = null }
+        )
+    }
+
+    // 진행 상태 다이얼로그
+    if (showProgress) {
+        ProgressDialog()
+    }
+
+    // 이미지 업로드 처리
+    suspend fun handleImageUpload(bitmap: Bitmap?, type: String) {
+        if (bitmap == null) {
+            errorMessage = "이미지를 가져올 수 없습니다."
+            return
+        }
+
+        showProgress = true
+        try {
+            val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, type)
+            val document = ScannedDocument(
+                type = type,
+                imageUrl = imageUrl,
+                userId = "test_user" // TODO: 실제 사용자 ID로 교체
+            )
+            val documentId = firestoreUtil.saveScannedDocument(document)
+
+            // 문서 상태 업데이트
+            documentUploadManager.updateDocument(type, documentId)
+
+            // 마지막 문서가 아니면 다음 페이지로 이동
+            if (pagerState.currentPage < 2) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+            // 모든 문서가 업로드되었으면 분석 시작
+            else if (documentUploadManager.isReadyForAnalysis()) {
+                val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
+
+                // 분석 결과 화면으로 이동
+                val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                    putExtra("analysisId", analysisId)
+                }
+                context.startActivity(intent)
+            }
+        } catch (e: Exception) {
+            errorMessage = when (e) {
+                is UploadError -> e.toUserMessage()
+                else -> "업로드 중 오류가 발생했습니다."
+            }
+        } finally {
+            showProgress = false
+        }
+    }
+
+    // 문서 업로드 후 처리
+    fun onDocumentUploaded(documentId: String, type: String) {
+        documentUploadManager.updateDocument(type, documentId)
+
+        // 다음 페이지로 자동 이동
+        if (pagerState.currentPage < 2) {
+            coroutineScope.launch {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        }
+        // 모든 문서가 업로드되었으면 분석 시작
+        else if (documentUploadManager.isReadyForAnalysis()) {
+            coroutineScope.launch {
+                try {
+                    showProgress = true
+                    val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
+
+                    // 분석 결과 화면으로 이동
+                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                        putExtra("analysisId", analysisId)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    errorMessage = "분석 요청 실패: ${e.message}"
+                } finally {
+                    showProgress = false
+                }
+            }
+        }
+    }
 
     // 카메라 권한 요청 런처
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -78,7 +180,6 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap ->
         if (bitmap != null) {
-            isLoading = true
             coroutineScope.launch {
                 try {
                     val documentType = when (pagerState.currentPage) {
@@ -94,15 +195,8 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
                         userId = "test_user"
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
-                    isLoading = false
-
-                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", documentType)
-                    }
-                    context.startActivity(intent)
+                    onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
-                    isLoading = false
                     errorMessage = "업로드 실패: ${e.message}"
                 }
             }
@@ -114,7 +208,6 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            isLoading = true
             coroutineScope.launch {
                 try {
                     val documentType = when (pagerState.currentPage) {
@@ -130,15 +223,8 @@ fun OnboardingScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil
                         userId = "test_user"
                     )
                     val documentId = firestoreUtil.saveScannedDocument(document)
-                    isLoading = false
-
-                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", documentType)
-                    }
-                    context.startActivity(intent)
+                    onDocumentUploaded(documentId, documentType)
                 } catch (e: Exception) {
-                    isLoading = false
                     errorMessage = "업로드 실패: ${e.message}"
                 }
             }
