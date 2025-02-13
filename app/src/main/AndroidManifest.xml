@@ -18,22 +18,27 @@
         android:label="집신"
         android:supportsRtl="true"
         android:theme="@style/Theme.Jibsin_project"
+        android:name=".JibsinApplication"
         >
 
-        <!-- 앱 시작 시 열리는 로그인 화면 -->
+        <!-- 앱 시작 시 열리는 화면 -->
         <activity
-            android:name=".login.LoginActivity"
-            android:exported="true"> <!-- android:exported 추가 -->
+            android:name=".onboarding.OnboardingActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".login.LoginActivity"
+            android:exported="true" />
+
         <!-- 회원가입 화면 -->
         <activity
             android:name=".login.SignUpActivity"
-            android:exported="false" /> <!-- 회원가입 화면은 외부에서 시작되지 않으므로 false -->
+            android:exported="true" />
 
         <activity android:name=".Home.HomeActivity" />
         <activity android:name=".scan.BuildingRegistryScanActivity" />

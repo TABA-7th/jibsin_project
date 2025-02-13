@@ -90,4 +90,8 @@ dependencies {
 
     // OpenCV
     implementation("com.quickbirdstudios:opencv:4.5.3.0")
+
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+    implementation("com.airbnb.android:lottie:5.2.0") // Lottie 애니메이션
+    implementation("com.airbnb.android:lottie-compose:6.0.0")
 }
