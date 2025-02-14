@@ -55,8 +55,7 @@ fun AppNavigation(documentUploadManager: DocumentUploadManager) {
     if (isLoggedIn) {
         HomeScreen(
             onMonthlyRentClick = { /* 월세 화면 이동 처리 */ },
-            onLeaseClick = { /* 전세 화면 이동 처리 */ },
-            onChatBotClick= { /* 챗봇 화면 이동 처리 */ }
+            onLeaseClick = { /* 전세 화면 이동 처리 */ }
         )
     } else if (isSignUpScreen) {
         SignUpScreen(onSignUpComplete = { isSignUpScreen = false })

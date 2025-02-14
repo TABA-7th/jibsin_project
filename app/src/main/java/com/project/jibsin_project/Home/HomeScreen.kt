@@ -31,8 +31,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     onMonthlyRentClick: () -> Unit,
-    onLeaseClick: () -> Unit,
-    onChatBotClick: () -> Unit
+    onLeaseClick: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -162,8 +161,7 @@ fun HomeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp)
-                        .padding(bottom = 70.dp),
+                        .padding(16.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -182,38 +180,6 @@ fun HomeScreen(
                             onClick = onLeaseClick // 전세 버튼 클릭 시 이동 처리
                         )
                     }
-                }
-
-                // 챗봇 버튼
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 64.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(80.dp)
-                            .shadow(elevation = 8.dp, shape = RoundedCornerShape(40.dp))
-                            .background(Color.White, shape = RoundedCornerShape(40.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        IconButton(onClick = onChatBotClick) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_ai_chatbot),
-                                contentDescription = "AI 챗봇",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(60.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "AI 챗봇",
-                        fontSize = 15.sp,
-                        color = Color.Black
-                    )
                 }
             }
         }
@@ -289,7 +255,6 @@ fun HomeCard(icon: Painter, label: String, onClick: () -> Unit) {
 fun PreviewHomeScreen() {
     HomeScreen(
         onMonthlyRentClick = {},
-        onLeaseClick = {},
-        onChatBotClick = {}
+        onLeaseClick = {}
     )
 }
