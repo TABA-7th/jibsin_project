@@ -134,8 +134,12 @@ class DocumentUploadManager private constructor() {
         val index = currentDocs.indexOf(documentId)
 
         if (index != -1) {
+            // 즉시 UI 업데이트
+            val updatedDocs = currentDocs - documentId
+            updateDocuments(type, updatedDocs)
+
             try {
-                // Firestore에서 문서 정보 가져오기
+                // 백그라운드에서 실제 삭제 작업 수행
                 val doc = firestoreUtil.getDocument(documentId)
                 val pageNumber = doc?.getLong("pageNumber")?.toInt()
 
@@ -147,9 +151,6 @@ class DocumentUploadManager private constructor() {
                 // Firestore에서 문서 삭제
                 firestoreUtil.deleteDocument(documentId)
 
-                // 문서 목록에서 제거
-                val updatedDocs = currentDocs - documentId
-
                 // 나머지 문서들의 페이지 번호 업데이트
                 for (i in (index until updatedDocs.size)) {
                     val remainingDocId = updatedDocs[i]
@@ -159,7 +160,7 @@ class DocumentUploadManager private constructor() {
                     val newUrl = firebaseStorageUtil.updatePageNumber(
                         currentGroupId,
                         type,
-                        i + 2,  // 기존 페이지 번호
+                        i + 2,
                         newPageNumber
                     )
 
@@ -169,10 +170,9 @@ class DocumentUploadManager private constructor() {
                         "imageUrl" to newUrl
                     ))
                 }
-
-                // 상태 업데이트
-                updateDocuments(type, updatedDocs)
             } catch (e: Exception) {
+                // 에러 발생 시 상태 복구
+                updateDocuments(type, currentDocs)
                 throw e
             }
         }
