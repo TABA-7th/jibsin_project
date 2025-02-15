@@ -76,4 +76,50 @@ class FirebaseStorageUtil {
             bitmap.height - (2 * cropMargin)
         )
     }
+
+    suspend fun updatePageNumber(
+        groupId: String,
+        documentType: String,
+        oldPageNumber: Int,
+        newPageNumber: Int
+    ): String {
+        val oldRef = storageRef.child("$groupId/${documentType}_page${oldPageNumber}.jpg")
+        val newRef = storageRef.child("$groupId/${documentType}_page${newPageNumber}.jpg")
+
+        try {
+            // 기존 파일의 URL 가져오기
+            val originalUrl = oldRef.downloadUrl.await().toString()
+
+            // 파일 복사
+            val bytes = oldRef.getBytes(10L * 1024 * 1024).await() // 10MB limit
+            newRef.putBytes(bytes).await()
+
+            // 기존 파일 삭제
+            oldRef.delete().await()
+
+            // 새 파일의 URL 반환
+            return newRef.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    suspend fun deleteDocument(groupId: String, documentType: String, pageNumber: Int) {
+        val ref = storageRef.child("$groupId/${documentType}_page${pageNumber}.jpg")
+        try {
+            // 파일이 존재하는지 먼저 확인
+            try {
+                ref.metadata.await()
+            } catch (e: Exception) {
+                // 파일이 없으면 그냥 반환
+                return
+            }
+
+            // 파일이 존재하면 삭제 시도
+            ref.delete().await()
+        } catch (e: Exception) {
+            // 삭제 실패해도 크래시 방지
+            e.printStackTrace()
+        }
+    }
 }

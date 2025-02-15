@@ -46,11 +46,22 @@ class FirestoreUtil {
         }
     }
 
-    suspend fun updateDocumentGroup(groupId: String, updates: Map<String, Any>) {
+    suspend fun updateDocument(documentId: String, updates: Map<String, Any>) {
         try {
-            db.collection("document_groups")
-                .document(groupId)
+            db.collection("scanned_documents")
+                .document(documentId)
                 .update(updates)
+                .await()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    suspend fun deleteDocument(documentId: String) {
+        try {
+            db.collection("scanned_documents")
+                .document(documentId)
+                .delete()
                 .await()
         } catch (e: Exception) {
             throw e

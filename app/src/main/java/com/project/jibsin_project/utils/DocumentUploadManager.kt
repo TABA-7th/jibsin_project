@@ -68,4 +68,113 @@ class DocumentUploadManager private constructor() {
             }
         }
     }
+
+    suspend fun reorderDocuments(
+        type: String,
+        fromIndex: Int,
+        toIndex: Int,
+        firebaseStorageUtil: FirebaseStorageUtil,
+        firestoreUtil: FirestoreUtil
+    ) {
+        val currentStatus = _documentStatus.value
+        val currentDocs = currentStatus.documentSets[type]?.toMutableList() ?: return
+
+        if (fromIndex < 0 || toIndex < 0 || fromIndex >= currentDocs.size || toIndex >= currentDocs.size) {
+            return
+        }
+
+        // 문서 ID 순서 변경
+        val movedDoc = currentDocs.removeAt(fromIndex)
+        currentDocs.add(toIndex, movedDoc)
+
+        // Storage 파일 이름 업데이트
+        try {
+            // 영향을 받는 범위의 모든 문서 업데이트
+            val start = minOf(fromIndex, toIndex)
+            val end = maxOf(fromIndex, toIndex)
+
+            for (i in start..end) {
+                val docId = currentDocs[i]
+                val doc = firestoreUtil.getDocument(docId)
+                val oldPageNumber = doc?.getLong("pageNumber")?.toInt() ?: continue
+                val newPageNumber = i + 1
+
+                if (oldPageNumber != newPageNumber) {
+                    // Storage 파일 이름 업데이트
+                    val newUrl = firebaseStorageUtil.updatePageNumber(
+                        currentGroupId,
+                        type,
+                        oldPageNumber,
+                        newPageNumber
+                    )
+
+                    // Firestore 문서 업데이트
+                    firestoreUtil.updateDocument(docId, mapOf(
+                        "pageNumber" to newPageNumber,
+                        "imageUrl" to newUrl
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            throw e
+        }
+
+        // 문서 상태 업데이트
+        updateDocuments(type, currentDocs)
+    }
+
+    suspend fun removeDocumentWithStorage(
+        type: String,
+        documentId: String,
+        firebaseStorageUtil: FirebaseStorageUtil,
+        firestoreUtil: FirestoreUtil
+    ) {
+        val currentStatus = _documentStatus.value
+        val currentDocs = currentStatus.documentSets[type]?.toMutableList() ?: return
+        val index = currentDocs.indexOf(documentId)
+
+        if (index != -1) {
+            try {
+                // Firestore에서 문서 정보 가져오기
+                val doc = firestoreUtil.getDocument(documentId)
+                val pageNumber = doc?.getLong("pageNumber")?.toInt()
+
+                // Storage에서 파일 삭제
+                if (pageNumber != null) {
+                    firebaseStorageUtil.deleteDocument(currentGroupId, type, pageNumber)
+                }
+
+                // Firestore에서 문서 삭제
+                firestoreUtil.deleteDocument(documentId)
+
+                // 문서 목록에서 제거
+                val updatedDocs = currentDocs - documentId
+
+                // 나머지 문서들의 페이지 번호 업데이트
+                for (i in (index until updatedDocs.size)) {
+                    val remainingDocId = updatedDocs[i]
+                    val newPageNumber = i + 1
+
+                    // Storage 파일 이름 업데이트
+                    val newUrl = firebaseStorageUtil.updatePageNumber(
+                        currentGroupId,
+                        type,
+                        i + 2,  // 기존 페이지 번호
+                        newPageNumber
+                    )
+
+                    // Firestore 문서 업데이트
+                    firestoreUtil.updateDocument(remainingDocId, mapOf(
+                        "pageNumber" to newPageNumber,
+                        "imageUrl" to newUrl
+                    ))
+                }
+
+                // 상태 업데이트
+                updateDocuments(type, updatedDocs)
+            } catch (e: Exception) {
+                throw e
+            }
+        }
+    }
 }

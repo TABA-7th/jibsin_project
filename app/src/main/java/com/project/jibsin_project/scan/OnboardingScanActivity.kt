@@ -13,10 +13,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,20 +29,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.google.accompanist.pager.*
 import com.project.jibsin_project.utils.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.geometry.Offset
+import kotlin.math.roundToInt
+import androidx.compose.ui.draw.shadow
 
 class OnboardingScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -247,9 +259,14 @@ fun DocumentUploadScreen(
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
+    var draggedItem by remember { mutableStateOf<DocumentPreview?>(null) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val gridState = rememberLazyGridState()
+    var draggingItem by remember { mutableStateOf<DocumentPreview?>(null) }
+    var dropTarget by remember { mutableStateOf<DocumentPreview?>(null) }
+    val density = LocalDensity.current
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
     // 문서 상태 관찰
     val documentStatus by documentUploadManager.documentStatus.collectAsState()
@@ -380,23 +397,99 @@ fun DocumentUploadScreen(
         if (uploadedDocuments.isNotEmpty()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
+                state = gridState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uploadedDocuments.size) { index ->
-                    val document = uploadedDocuments[index]
-                    DocumentPreviewItem(
-                        document = document,
-                        onDelete = {
-                            documentUploadManager.removeDocument(documentType, document.id)
-                        }
-                    )
+                items(
+                    items = uploadedDocuments,
+                    key = { it.id }
+                ) { document ->
+                    val isDragging = draggingItem?.id == document.id
+                    val isDropTarget = dropTarget?.id == document.id
+
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                if (isDragging) {
+                                    IntOffset(
+                                        dragOffset.x.roundToInt(),
+                                        dragOffset.y.roundToInt()
+                                    )
+                                } else {
+                                    IntOffset.Zero
+                                }
+                            }
+                    ) {
+                        DocumentPreviewItem(
+                            document = document,
+                            onDelete = {
+                                coroutineScope.launch {
+                                    try {
+                                        documentUploadManager.removeDocumentWithStorage(
+                                            documentType,
+                                            document.id,
+                                            firebaseStorageUtil,
+                                            firestoreUtil
+                                        )
+                                    } catch (e: Exception) {
+                                        errorMessage = "문서 삭제 실패: ${e.message}"
+                                    }
+                                }
+                            },
+                            onDragStart = { draggingItem = document },
+                            onDragEnd = {
+                                dropTarget?.let { target ->
+                                    val fromIndex = uploadedDocuments.indexOfFirst { it.id == draggingItem?.id }
+                                    val toIndex = uploadedDocuments.indexOfFirst { it.id == target.id }
+                                    if (fromIndex != -1 && toIndex != -1 && fromIndex != toIndex) {
+                                        coroutineScope.launch {
+                                            try {
+                                                documentUploadManager.reorderDocuments(
+                                                    documentType,
+                                                    fromIndex,
+                                                    toIndex,
+                                                    firebaseStorageUtil,
+                                                    firestoreUtil
+                                                )
+                                            } catch (e: Exception) {
+                                                errorMessage = "문서 순서 변경 실패: ${e.message}"
+                                            }
+                                        }
+                                    }
+                                }
+                                draggingItem = null
+                                dropTarget = null
+                                dragOffset = Offset.Zero
+                            },
+                            onDragCancel = {
+                                draggingItem = null
+                                dropTarget = null
+                                dragOffset = Offset.Zero
+                            },
+                            onPositionChanged = { x, y ->
+                                dragOffset = Offset(x, y)
+                                val hitDocument = uploadedDocuments.firstOrNull { item ->
+                                    val position = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                        it.key == item.id
+                                    }
+                                    position != null && x >= position.offset.x &&
+                                            x <= position.offset.x + position.size.width &&
+                                            y >= position.offset.y &&
+                                            y <= position.offset.y + position.size.height
+                                }
+                                dropTarget = hitDocument
+                            },
+                            modifier = Modifier.zIndex(if (isDragging) 1f else 0f),
+                            isDragging = isDragging
+                        )
+                    }
                 }
             }
-        } else {
+        }else {
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -492,12 +585,38 @@ fun DocumentUploadScreen(
 @Composable
 fun DocumentPreviewItem(
     document: DocumentPreview,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDragStart: () -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+    onPositionChanged: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
+    isDragging: Boolean = false
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .aspectRatio(0.7f)
             .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { onDragStart() },
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragCancel() },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onPositionChanged(change.position.x, change.position.y)
+                    }
+                )
+            }
+            .then(
+                if (isDragging) {
+                    Modifier
+                        .alpha(0.7f)
+                        .shadow(8.dp, RoundedCornerShape(8.dp))
+                } else {
+                    Modifier
+                }
+            )
     ) {
         // 문서 미리보기 이미지
         AsyncImage(
