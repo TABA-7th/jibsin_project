@@ -25,7 +25,7 @@ class FirebaseStorageUtil {
         groupId: String = UUID.randomUUID().toString(),
         pageNumber: Int = 1
     ): String {
-        val scannedBitmap = documentScanner.scanDocument(bitmap)
+        val scannedBitmap = documentScanner.scanDocument(bitmap, documentType)
         val croppedBitmap = cropBitmapEdges(scannedBitmap)
         return uploadImage(croppedBitmap, documentType, groupId, pageNumber)
     }

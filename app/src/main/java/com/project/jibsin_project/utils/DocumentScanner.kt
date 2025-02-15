@@ -18,10 +18,10 @@ class DocumentScanner {
         }
     }
 
-    suspend fun scanDocument(bitmap: Bitmap): Bitmap = withContext(Dispatchers.IO) {
+    suspend fun scanDocument(bitmap: Bitmap, documentType: String? = null): Bitmap = withContext(Dispatchers.IO) {
         try {
             // EXIF 정보를 유지하면서 이미지 방향 보정
-            val rotatedBitmap = correctImageOrientation(bitmap)
+            val rotatedBitmap = correctImageOrientation(bitmap, documentType)
 
             // Bitmap을 Mat으로 변환
             val originalMat = Mat()
@@ -48,8 +48,8 @@ class DocumentScanner {
                 )
                 Utils.matToBitmap(enhancedMat, resultBitmap)
 
-                // 최종 이미지 방향 확인 및 수정
-                return@withContext ensurePortraitOrientation(resultBitmap)
+                // 문서 타입에 따른 방향 설정
+                return@withContext ensureCorrectOrientation(resultBitmap, documentType)
             }
             rotatedBitmap
         } catch (e: Exception) {
@@ -57,24 +57,53 @@ class DocumentScanner {
         }
     }
 
-    private fun ensurePortraitOrientation(bitmap: Bitmap): Bitmap {
-        return if (bitmap.width > bitmap.height) {
-            val matrix = Matrix()
-            matrix.postRotate(90f)
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } else {
-            bitmap
+    private fun ensureCorrectOrientation(bitmap: Bitmap, documentType: String?): Bitmap {
+        return when (documentType) {
+            "building_registry" -> {
+                // 건축물대장은 가로 방향으로 유지
+                if (bitmap.width < bitmap.height) {
+                    val matrix = Matrix()
+                    matrix.postRotate(-90f)
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                } else {
+                    bitmap
+                }
+            }
+            else -> {
+                // 다른 문서들은 세로 방향으로 유지
+                if (bitmap.width > bitmap.height) {
+                    val matrix = Matrix()
+                    matrix.postRotate(90f)
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                } else {
+                    bitmap
+                }
+            }
         }
     }
 
-    private fun correctImageOrientation(bitmap: Bitmap): Bitmap {
-        // 이미지 방향 강제로 세로로 설정
-        return if (bitmap.width > bitmap.height) {
-            val matrix = Matrix()
-            matrix.postRotate(90f)
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } else {
-            bitmap
+    private fun correctImageOrientation(bitmap: Bitmap, documentType: String?): Bitmap {
+        return when (documentType) {
+            "building_registry" -> {
+                // 건축물대장은 가로 방향으로 유지
+                if (bitmap.width < bitmap.height) {
+                    val matrix = Matrix()
+                    matrix.postRotate(-90f)
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                } else {
+                    bitmap
+                }
+            }
+            else -> {
+                // 다른 문서들은 세로 방향으로 유지
+                if (bitmap.width > bitmap.height) {
+                    val matrix = Matrix()
+                    matrix.postRotate(90f)
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+                } else {
+                    bitmap
+                }
+            }
         }
     }
 
