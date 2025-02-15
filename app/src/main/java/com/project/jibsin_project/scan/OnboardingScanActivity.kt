@@ -325,15 +325,12 @@ fun DocumentUploadScreen(
                 try {
                     val groupId = documentUploadManager.getCurrentGroupId()
                     uris.forEachIndexed { index, uri ->
-                        val bitmap = context.contentResolver.openInputStream(uri)?.use {
-                            BitmapFactory.decodeStream(it)
-                        } ?: throw IllegalStateException("Failed to read image")
-
-                        val imageUrl = firebaseStorageUtil.uploadScannedImage(
-                            bitmap,
-                            documentType,
-                            groupId,
-                            uploadedDocuments.size + index + 1
+                        val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
+                            uri = uri,
+                            context = context,
+                            documentType = documentType,
+                            groupId = groupId,
+                            pageNumber = uploadedDocuments.size + index + 1
                         )
 
                         val document = ScannedDocument(
