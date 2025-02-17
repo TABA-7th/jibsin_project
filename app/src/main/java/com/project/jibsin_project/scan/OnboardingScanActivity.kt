@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -54,6 +55,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.geometry.Offset
 import kotlin.math.roundToInt
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
@@ -671,29 +673,57 @@ fun FullScreenImageDialog(
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false) // 다이얼로그가 화면 전체를 사용하도록 설정
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        var scale by remember { mutableStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+        var rotation by remember { mutableStateOf(0f) }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .padding(0.dp), // 패딩 제거
+                .padding(0.dp),
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Full Image",
                 modifier = Modifier
-                    .fillMaxWidth() // 가로 너비를 화면에 맞춤
-                    .aspectRatio( // 이미지의 가로세로 비율 유지
-                        ratio = 1f,
-                        matchHeightConstraintsFirst = false
-                    )
-                    .clickable { onDismiss() },
-                contentScale = ContentScale.FillWidth // 가로 너비에 맞추어 이미지 크기 조정
+                    .fillMaxWidth()
+                    .aspectRatio(1f, matchHeightConstraintsFirst = false)
+                    .pointerInput(Unit) {
+                        detectTransformGestures { centroid, pan, zoom, rotationChange ->
+                            // 확대/축소 범위 제한 (0.5배 ~ 5배)
+                            scale = (scale * zoom).coerceIn(0.5f, 5f)
+
+                            // 이미지가 확대된 상태에서만 이동 가능
+                            if (scale > 1f) {
+                                val newOffset = offset + pan
+                                // 이동 범위 제한 (화면 밖으로 너무 많이 벗어나지 않도록)
+                                val maxOffset = size.width * (scale - 1f) / 2f
+                                offset = Offset(
+                                    newOffset.x.coerceIn(-maxOffset, maxOffset),
+                                    newOffset.y.coerceIn(-maxOffset, maxOffset)
+                                )
+                            }
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                        // 이미지가 원래 크기일 때는 위치 초기화
+                        if (scale <= 1f) {
+                            translationX = 0f
+                            translationY = 0f
+                        }
+                    },
+                contentScale = ContentScale.FillWidth
             )
 
-            // 닫기 버튼 추가
+            // 닫기 버튼
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier
@@ -705,6 +735,18 @@ fun FullScreenImageDialog(
                     contentDescription = "Close",
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // 확대/축소 안내 텍스트
+            if (scale <= 1f) {
+                Text(
+                    text = "손가락으로 확대/축소할 수 있습니다",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp)
                 )
             }
         }
