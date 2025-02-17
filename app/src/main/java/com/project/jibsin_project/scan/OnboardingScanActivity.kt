@@ -677,7 +677,6 @@ fun FullScreenImageDialog(
     ) {
         var scale by remember { mutableStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }
-        var rotation by remember { mutableStateOf(0f) }
 
         Box(
             modifier = Modifier
@@ -691,7 +690,7 @@ fun FullScreenImageDialog(
                 contentDescription = "Full Image",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1f, matchHeightConstraintsFirst = false)
+                    .fillMaxHeight()
                     .pointerInput(Unit) {
                         detectTransformGestures { centroid, pan, zoom, rotationChange ->
                             // 확대/축소 범위 제한 (0.5배 ~ 5배)
@@ -720,7 +719,7 @@ fun FullScreenImageDialog(
                             translationY = 0f
                         }
                     },
-                contentScale = ContentScale.FillWidth
+                contentScale = ContentScale.Fit // Fit으로 변경하여 이미지 전체가 보이도록 함
             )
 
             // 닫기 버튼
