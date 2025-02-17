@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -53,6 +54,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.geometry.Offset
 import kotlin.math.roundToInt
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 class OnboardingScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -593,6 +596,8 @@ fun DocumentPreviewItem(
     modifier: Modifier = Modifier,
     isDragging: Boolean = false
 ) {
+    var showFullImage by remember { mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .aspectRatio(0.7f)
@@ -608,15 +613,7 @@ fun DocumentPreviewItem(
                     }
                 )
             }
-            .then(
-                if (isDragging) {
-                    Modifier
-                        .alpha(0.7f)
-                        .shadow(8.dp, RoundedCornerShape(8.dp))
-                } else {
-                    Modifier
-                }
-            )
+            .clickable { showFullImage = true } // 클릭하면 전체보기 활성화
     ) {
         // 문서 미리보기 이미지
         AsyncImage(
@@ -655,6 +652,61 @@ fun DocumentPreviewItem(
                 tint = Color.Black,
                 modifier = Modifier.size(16.dp)
             )
+        }
+    }
+
+    // 이미지 전체 보기 다이얼로그
+    if (showFullImage) {
+        FullScreenImageDialog(
+            imageUrl = document.imageUrl,
+            onDismiss = { showFullImage = false }
+        )
+    }
+}
+
+@Composable
+fun FullScreenImageDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false) // 다이얼로그가 화면 전체를 사용하도록 설정
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .padding(0.dp), // 패딩 제거
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Full Image",
+                modifier = Modifier
+                    .fillMaxWidth() // 가로 너비를 화면에 맞춤
+                    .aspectRatio( // 이미지의 가로세로 비율 유지
+                        ratio = 1f,
+                        matchHeightConstraintsFirst = false
+                    )
+                    .clickable { onDismiss() },
+                contentScale = ContentScale.FillWidth // 가로 너비에 맞추어 이미지 크기 조정
+            )
+
+            // 닫기 버튼 추가
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
