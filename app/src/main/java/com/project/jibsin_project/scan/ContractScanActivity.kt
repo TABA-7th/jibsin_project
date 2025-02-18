@@ -22,42 +22,40 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.project.jibsin_project.utils.ContractManager
 import com.project.jibsin_project.utils.FirebaseStorageUtil
-import com.project.jibsin_project.utils.FirestoreUtil
-import com.project.jibsin_project.utils.ScannedDocument
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
 class ContractScanActivity : ComponentActivity() {
+    private val contractManager = ContractManager()
     private val firebaseStorageUtil = FirebaseStorageUtil()
-    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ContractScanScreen(firebaseStorageUtil, firestoreUtil)
+            ContractScanScreen(contractManager, firebaseStorageUtil)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
+fun ContractScanScreen(contractManager: ContractManager, firebaseStorageUtil: FirebaseStorageUtil) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val userId = "test_user"
 
-    // 각 스캔 세션에 대한 고유 그룹 ID 생성
-    val groupId = remember { UUID.randomUUID().toString() }
-    var currentPage by remember { mutableStateOf(1) }
-
-    val hasPermission = remember {
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
+    // 계약 ID 생성
+    val contractId = remember {
+        runBlocking {
+            contractManager.createContract(userId)
+        }
     }
+    var currentPage by remember { mutableStateOf(1) }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicturePreview()
@@ -69,24 +67,23 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(
                         bitmap = bitmap,
                         documentType = "contract",
-                        groupId = groupId,
+                        contractId = contractId,
                         pageNumber = currentPage
                     )
-                    val document = ScannedDocument(
-                        type = "contract",
+
+                    contractManager.addDocument(
+                        userId = userId,
+                        contractId = contractId,
+                        documentType = "contract",
                         imageUrl = imageUrl,
-                        userId = "test_user",
-                        groupId = groupId,
                         pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "contract")
-                        putExtra("groupId", groupId)
+                        putExtra("contractId", contractId)
+                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -108,24 +105,23 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
                         uri = uri,
                         context = context,
                         documentType = "contract",
-                        groupId = groupId,
+                        contractId = contractId,
                         pageNumber = currentPage
                     )
-                    val document = ScannedDocument(
-                        type = "contract",
+
+                    contractManager.addDocument(
+                        userId = userId,
+                        contractId = contractId,
+                        documentType = "contract",
                         imageUrl = imageUrl,
-                        userId = "test_user",
-                        groupId = groupId,
                         pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "contract")
-                        putExtra("groupId", groupId)
+                        putExtra("contractId", contractId)
+                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -203,6 +199,6 @@ fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: 
 fun PreviewContractScanScreen() {
     ContractScanScreen(
         firebaseStorageUtil = FirebaseStorageUtil(),
-        firestoreUtil = FirestoreUtil()
+        contractManager = ContractManager()
     )
 }

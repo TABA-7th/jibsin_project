@@ -8,7 +8,6 @@ import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
-import java.util.UUID
 
 class FirebaseStorageUtil {
     private val storage = Firebase.storage
@@ -22,40 +21,41 @@ class FirebaseStorageUtil {
     suspend fun uploadScannedImage(
         bitmap: Bitmap,
         documentType: String,
-        groupId: String = UUID.randomUUID().toString(),
-        pageNumber: Int = 1
+        contractId: String,
+        pageNumber: Int
     ): String {
+        // 문서 스캔 처리
         val scannedBitmap = documentScanner.scanDocument(bitmap, documentType)
-        val croppedBitmap = cropBitmapEdges(scannedBitmap)
-        return uploadImage(croppedBitmap, documentType, groupId, pageNumber)
+        return uploadImage(scannedBitmap, documentType, contractId, pageNumber)
     }
 
     suspend fun uploadScannedImageFromUri(
         uri: Uri,
         context: Context,
         documentType: String,
-        groupId: String = UUID.randomUUID().toString(),
-        pageNumber: Int = 1
+        contractId: String,
+        pageNumber: Int
     ): String {
         val bitmap = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it)
         } ?: throw IllegalStateException("Failed to read image file")
 
-        return uploadScannedImage(bitmap, documentType, groupId, pageNumber)
+        return uploadScannedImage(bitmap, documentType, contractId, pageNumber)
     }
 
     private suspend fun uploadImage(
         bitmap: Bitmap,
         documentType: String,
-        groupId: String,
+        contractId: String,
         pageNumber: Int
     ): String {
         val baos = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
         val data = baos.toByteArray()
 
+        // 파일 경로 구조: scanned_documents/{contractId}/{documentType}_page{number}.jpg
         val fileName = "${documentType}_page${pageNumber}.jpg"
-        val imageRef = storageRef.child("$groupId/$fileName")
+        val imageRef = storageRef.child("$contractId/$fileName")
 
         return try {
             imageRef.putBytes(data).await()
@@ -65,60 +65,34 @@ class FirebaseStorageUtil {
         }
     }
 
-    private fun cropBitmapEdges(bitmap: Bitmap): Bitmap {
-        // 여백 완전 제거를 위한 추가 크롭
-        val cropMargin = 0
-        return Bitmap.createBitmap(
-            bitmap,
-            cropMargin,
-            cropMargin,
-            bitmap.width - (2 * cropMargin),
-            bitmap.height - (2 * cropMargin)
-        )
-    }
-
     suspend fun updatePageNumber(
-        groupId: String,
+        contractId: String,
         documentType: String,
         oldPageNumber: Int,
         newPageNumber: Int
     ): String {
-        val oldRef = storageRef.child("$groupId/${documentType}_page${oldPageNumber}.jpg")
-        val newRef = storageRef.child("$groupId/${documentType}_page${newPageNumber}.jpg")
+        val oldRef = storageRef.child("$contractId/${documentType}_page${oldPageNumber}.jpg")
+        val newRef = storageRef.child("$contractId/${documentType}_page${newPageNumber}.jpg")
 
         try {
-            // 기존 파일의 URL 가져오기
-            val originalUrl = oldRef.downloadUrl.await().toString()
-
-            // 파일 복사
-            val bytes = oldRef.getBytes(10L * 1024 * 1024).await() // 10MB limit
+            val bytes = oldRef.getBytes(10L * 1024 * 1024).await()
             newRef.putBytes(bytes).await()
-
-            // 기존 파일 삭제
             oldRef.delete().await()
-
-            // 새 파일의 URL 반환
             return newRef.downloadUrl.await().toString()
         } catch (e: Exception) {
             throw e
         }
     }
 
-    suspend fun deleteDocument(groupId: String, documentType: String, pageNumber: Int) {
-        val ref = storageRef.child("$groupId/${documentType}_page${pageNumber}.jpg")
+    suspend fun deleteDocument(
+        contractId: String,
+        documentType: String,
+        pageNumber: Int
+    ) {
+        val ref = storageRef.child("$contractId/${documentType}_page${pageNumber}.jpg")
         try {
-            // 파일이 존재하는지 먼저 확인
-            try {
-                ref.metadata.await()
-            } catch (e: Exception) {
-                // 파일이 없으면 그냥 반환
-                return
-            }
-
-            // 파일이 존재하면 삭제 시도
             ref.delete().await()
         } catch (e: Exception) {
-            // 삭제 실패해도 크래시 방지
             e.printStackTrace()
         }
     }

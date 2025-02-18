@@ -2,47 +2,122 @@ package com.project.jibsin_project.utils
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.UUID
 
-data class DocumentStatus(
-    val buildingRegistry: String? = null,
-    val registryDocument: String? = null,
-    val contract: String? = null
+data class DocumentGroup(
+    val documentSets: Map<String, List<String>> = mapOf(),
+    val groupId: String = ""
 )
 
 class DocumentUploadManager private constructor() {
+    private val contractManager = ContractManager()
     private val _documentStatus = MutableStateFlow(DocumentGroup())
     val documentStatus: StateFlow<DocumentGroup> = _documentStatus
 
-    private var currentGroupId: String = UUID.randomUUID().toString()
+    private var currentContractId: String? = null
+    private var currentUserId: String? = null
 
-    fun updateDocuments(type: String, documentIds: List<String>) {
-        val currentStatus = _documentStatus.value
-        val updatedSets = currentStatus.documentSets.toMutableMap()
-        updatedSets[type] = documentIds
-
-        _documentStatus.value = currentStatus.copy(
-            documentSets = updatedSets,
-            groupId = currentGroupId
-        )
+    // 새로운 계약을 생성하고 현재 작업 중인 계약으로 설정
+    suspend fun createNewContract(userId: String) {
+        currentUserId = userId
+        currentContractId = contractManager.createContract(userId)
+        _documentStatus.value = DocumentGroup(groupId = currentContractId ?: "")
     }
 
-    fun addDocument(type: String, documentId: String) {
-        val currentStatus = _documentStatus.value
-        val currentDocs = currentStatus.documentSets[type] ?: listOf()
-        val updatedDocs = currentDocs + documentId
-
-        updateDocuments(type, updatedDocs)
+    // 현재 작업 중인 계약 ID를 반환
+    fun getCurrentContractId(): String {
+        return currentContractId ?: throw IllegalStateException("업로드 실패: Contract not found")
     }
 
-    fun removeDocument(type: String, documentId: String) {
-        val currentStatus = _documentStatus.value
-        val currentDocs = currentStatus.documentSets[type] ?: listOf()
-        val updatedDocs = currentDocs - documentId
-
-        updateDocuments(type, updatedDocs)
+    // 현재 작업 중인 사용자 ID를 반환
+    fun getCurrentUserId(): String {
+        return currentUserId ?: throw IllegalStateException("User not found")
     }
 
+    // 문서를 추가하고 로컬 상태 업데이트
+    suspend fun addDocument(type: String, imageUrl: String, pageNumber: Int) {
+        val contractId = getCurrentContractId()
+        val userId = getCurrentUserId()
+
+        try {
+            contractManager.addDocument(
+                userId = userId,
+                contractId = contractId,
+                documentType = type,
+                imageUrl = imageUrl,
+                pageNumber = pageNumber
+            )
+
+            // Update local status
+            val currentDocs = _documentStatus.value.documentSets.toMutableMap()
+            val typeDocuments = currentDocs.getOrDefault(type, listOf()).toMutableList()
+            typeDocuments.add(imageUrl)
+            currentDocs[type] = typeDocuments
+            _documentStatus.value = DocumentGroup(documentSets = currentDocs, groupId = contractId)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 문서를 삭제하고 로컬 상태를 업데이트(삭제 후 나머지 문서들의 페이지 번호를 재정렬)
+    suspend fun removeDocument(type: String, pageNumber: Int) {
+        val contractId = getCurrentContractId()
+        val userId = getCurrentUserId()
+
+        try {
+            contractManager.removeDocument(
+                userId = userId,
+                contractId = contractId,
+                documentType = type,
+                pageNumber = pageNumber
+            )
+
+            // Update local status
+            val documents = contractManager.getDocuments(userId, contractId, type)
+            val currentDocs = _documentStatus.value.documentSets.toMutableMap()
+            currentDocs[type] = documents.map { it.imageUrl }
+            _documentStatus.value = DocumentGroup(documentSets = currentDocs, groupId = contractId)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 문서의 순서를 변경하고 로컬 상태를 업데이트(Storage의 파일명과 Contract의 문서 정보도 함께 업데이트)
+    suspend fun reorderDocuments(
+        type: String,
+        fromIndex: Int,
+        toIndex: Int,
+        firebaseStorageUtil: FirebaseStorageUtil
+    ) {
+        val contractId = getCurrentContractId()
+        val userId = getCurrentUserId()
+
+        try {
+            contractManager.reorderDocument(
+                userId = userId,
+                contractId = contractId,
+                documentType = type,
+                fromPage = fromIndex + 1,
+                toPage = toIndex + 1
+            )
+
+            val newUrl = firebaseStorageUtil.updatePageNumber(
+                contractId = contractId,
+                documentType = type,
+                oldPageNumber = fromIndex + 1,
+                newPageNumber = toIndex + 1
+            )
+
+            // Update local status
+            val documents = contractManager.getDocuments(userId, contractId, type)
+            val currentDocs = _documentStatus.value.documentSets.toMutableMap()
+            currentDocs[type] = documents.map { it.imageUrl }
+            _documentStatus.value = DocumentGroup(documentSets = currentDocs, groupId = contractId)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 모든 필요한 문서가 업로드되었는지 확인
     fun isReadyForAnalysis(): Boolean {
         return with(_documentStatus.value.documentSets) {
             get("building_registry")?.isNotEmpty() == true &&
@@ -51,12 +126,12 @@ class DocumentUploadManager private constructor() {
         }
     }
 
+    // 현재 상태를 초기화(새로운 계약 작업을 시작할 때 사용)
     fun reset() {
-        currentGroupId = UUID.randomUUID().toString()
-        _documentStatus.value = DocumentGroup(groupId = currentGroupId)
+        currentContractId = null
+        currentUserId = null
+        _documentStatus.value = DocumentGroup()
     }
-
-    fun getCurrentGroupId(): String = currentGroupId
 
     companion object {
         @Volatile
@@ -65,115 +140,6 @@ class DocumentUploadManager private constructor() {
         fun getInstance(): DocumentUploadManager {
             return instance ?: synchronized(this) {
                 instance ?: DocumentUploadManager().also { instance = it }
-            }
-        }
-    }
-
-    suspend fun reorderDocuments(
-        type: String,
-        fromIndex: Int,
-        toIndex: Int,
-        firebaseStorageUtil: FirebaseStorageUtil,
-        firestoreUtil: FirestoreUtil
-    ) {
-        val currentStatus = _documentStatus.value
-        val currentDocs = currentStatus.documentSets[type]?.toMutableList() ?: return
-
-        if (fromIndex < 0 || toIndex < 0 || fromIndex >= currentDocs.size || toIndex >= currentDocs.size) {
-            return
-        }
-
-        // 문서 ID 순서 변경
-        val movedDoc = currentDocs.removeAt(fromIndex)
-        currentDocs.add(toIndex, movedDoc)
-
-        // Storage 파일 이름 업데이트
-        try {
-            // 영향을 받는 범위의 모든 문서 업데이트
-            val start = minOf(fromIndex, toIndex)
-            val end = maxOf(fromIndex, toIndex)
-
-            for (i in start..end) {
-                val docId = currentDocs[i]
-                val doc = firestoreUtil.getDocument(docId)
-                val oldPageNumber = doc?.getLong("pageNumber")?.toInt() ?: continue
-                val newPageNumber = i + 1
-
-                if (oldPageNumber != newPageNumber) {
-                    // Storage 파일 이름 업데이트
-                    val newUrl = firebaseStorageUtil.updatePageNumber(
-                        currentGroupId,
-                        type,
-                        oldPageNumber,
-                        newPageNumber
-                    )
-
-                    // Firestore 문서 업데이트
-                    firestoreUtil.updateDocument(docId, mapOf(
-                        "pageNumber" to newPageNumber,
-                        "imageUrl" to newUrl
-                    ))
-                }
-            }
-        } catch (e: Exception) {
-            throw e
-        }
-
-        // 문서 상태 업데이트
-        updateDocuments(type, currentDocs)
-    }
-
-    suspend fun removeDocumentWithStorage(
-        type: String,
-        documentId: String,
-        firebaseStorageUtil: FirebaseStorageUtil,
-        firestoreUtil: FirestoreUtil
-    ) {
-        val currentStatus = _documentStatus.value
-        val currentDocs = currentStatus.documentSets[type]?.toMutableList() ?: return
-        val index = currentDocs.indexOf(documentId)
-
-        if (index != -1) {
-            // 즉시 UI 업데이트
-            val updatedDocs = currentDocs - documentId
-            updateDocuments(type, updatedDocs)
-
-            try {
-                // 백그라운드에서 실제 삭제 작업 수행
-                val doc = firestoreUtil.getDocument(documentId)
-                val pageNumber = doc?.getLong("pageNumber")?.toInt()
-
-                // Storage에서 파일 삭제
-                if (pageNumber != null) {
-                    firebaseStorageUtil.deleteDocument(currentGroupId, type, pageNumber)
-                }
-
-                // Firestore에서 문서 삭제
-                firestoreUtil.deleteDocument(documentId)
-
-                // 나머지 문서들의 페이지 번호 업데이트
-                for (i in (index until updatedDocs.size)) {
-                    val remainingDocId = updatedDocs[i]
-                    val newPageNumber = i + 1
-
-                    // Storage 파일 이름 업데이트
-                    val newUrl = firebaseStorageUtil.updatePageNumber(
-                        currentGroupId,
-                        type,
-                        i + 2,
-                        newPageNumber
-                    )
-
-                    // Firestore 문서 업데이트
-                    firestoreUtil.updateDocument(remainingDocId, mapOf(
-                        "pageNumber" to newPageNumber,
-                        "imageUrl" to newUrl
-                    ))
-                }
-            } catch (e: Exception) {
-                // 에러 발생 시 상태 복구
-                updateDocuments(type, currentDocs)
-                throw e
             }
         }
     }

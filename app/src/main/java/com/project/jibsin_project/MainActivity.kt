@@ -11,14 +11,14 @@ import com.google.firebase.FirebaseApp
 import com.project.jibsin_project.Home.HomeScreen
 import com.project.jibsin_project.login.LoginScreen
 import com.project.jibsin_project.login.SignUpScreen
+import com.project.jibsin_project.utils.ContractManager
 import com.project.jibsin_project.utils.DocumentUploadManager
 import com.project.jibsin_project.utils.FirebaseStorageUtil
-import com.project.jibsin_project.utils.FirestoreUtil
 
 class MainActivity : ComponentActivity() {
     private val documentUploadManager = DocumentUploadManager.getInstance()
     private val firebaseStorageUtil = FirebaseStorageUtil()
-    private val firestoreUtil = FirestoreUtil()
+    private val contractManager = ContractManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
