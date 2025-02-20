@@ -24,9 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.project.jibsin_project.utils.FirebaseStorageUtil
 import com.project.jibsin_project.utils.FirestoreUtil
-import com.project.jibsin_project.utils.ScannedDocument
+import com.project.jibsin_project.utils.ContractStatus
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 class RegistryDocumentScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -47,10 +46,19 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    // 각 스캔 세션에 대한 고유 그룹 ID 생성
-    val groupId = remember { UUID.randomUUID().toString() }
     var currentPage by remember { mutableStateOf(1) }
+
+    // contractId 상태 관리
+    var contractId by remember { mutableStateOf<String?>(null) }
+
+    // 컴포넌트가 처음 생성될 때 새로운 계약서 문서 생성
+    LaunchedEffect(Unit) {
+        try {
+            contractId = firestoreUtil.createNewContract("test_user")
+        } catch (e: Exception) {
+            errorMessage = "계약서 생성 실패: ${e.message}"
+        }
+    }
 
     val hasPermission = remember {
         ContextCompat.checkSelfPermission(
@@ -62,31 +70,31 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+        if (bitmap != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(
                         bitmap = bitmap,
-                        documentType = "contract",
-                        groupId = groupId,
-                        pageNumber = currentPage
-                    )
-                    val document = ScannedDocument(
-                        type = "contract",
-                        imageUrl = imageUrl,
+                        documentType = "registry_document",
                         userId = "test_user",
-                        groupId = groupId,
+                        contractId = contractId!!,
                         pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
+
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        documentType = "registry_document",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "contract")
-                        putExtra("groupId", groupId)
+                        putExtra("contractId", contractId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -100,32 +108,32 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
+        if (uri != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
                     val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
                         uri = uri,
                         context = context,
-                        documentType = "contract",
-                        groupId = groupId,
-                        pageNumber = currentPage
-                    )
-                    val document = ScannedDocument(
-                        type = "contract",
-                        imageUrl = imageUrl,
+                        documentType = "registry_document",
                         userId = "test_user",
-                        groupId = groupId,
+                        contractId = contractId!!,
                         pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
+
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        documentType = "registry_document",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "contract")
-                        putExtra("groupId", groupId)
+                        putExtra("contractId", contractId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {

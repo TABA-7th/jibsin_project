@@ -75,8 +75,7 @@ class OnboardingScanActivity : ComponentActivity() {
 @Composable
 fun OnboardingScanScreen(
     firebaseStorageUtil: FirebaseStorageUtil,
-    firestoreUtil: FirestoreUtil,
-    documentUploadManager: DocumentUploadManager = DocumentUploadManager.getInstance()
+    firestoreUtil: FirestoreUtil
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -84,18 +83,41 @@ fun OnboardingScanScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState()
 
+    // contractId 상태 관리
+    var contractId by remember { mutableStateOf<String?>(null) }
+
+    // 컴포넌트가 처음 생성될 때 새로운 계약서 문서 생성
+    LaunchedEffect(Unit) {
+        try {
+            contractId = firestoreUtil.createNewContract("test_user")
+        } catch (e: Exception) {
+            errorMessage = "계약서 생성 실패: ${e.message}"
+        }
+    }
+
     val pages = listOf(
         Triple("building_registry", "건축물대장", "건축물대장을 업로드하세요."),
         Triple("registry_document", "등기부등본", "등기부등본을 업로드하세요."),
         Triple("contract", "계약서", "계약서를 업로드하세요.")
     )
 
-    // 문서 업로드 상태 관찰
-    val documentStatus by documentUploadManager.documentStatus.collectAsState()
+    // 계약서 데이터 상태 관찰
+    var contract by remember { mutableStateOf<Contract?>(null) }
 
-    // 각 페이지별 문서 업로드 여부 확인
-    val hasDocuments = remember(documentStatus) {
-        documentStatus.documentSets.mapValues { it.value.isNotEmpty() }
+    // 계약서 데이터 로드
+    LaunchedEffect(contractId) {
+        if (contractId != null) {
+            contract = firestoreUtil.getContract("test_user", contractId!!)
+        }
+    }
+
+    // 각 문서 타입별 업로드 여부 확인
+    val hasDocuments = remember(contract) {
+        mapOf(
+            "building_registry" to (contract?.building_registry?.isNotEmpty() ?: false),
+            "registry_document" to (contract?.registry_document?.isNotEmpty() ?: false),
+            "contract" to (contract?.contract?.isNotEmpty() ?: false)
+        )
     }
 
     Scaffold(
@@ -121,15 +143,20 @@ fun OnboardingScanScreen(
                 modifier = Modifier.weight(1f)
             ) { page ->
                 val (type, title, description) = pages[page]
-                DocumentUploadScreen(
-                    documentType = type,
-                    title = title,
-                    description = description,
-                    documentUploadManager = documentUploadManager,
-                    firebaseStorageUtil = firebaseStorageUtil,
-                    firestoreUtil = firestoreUtil,
-                    onUploadComplete = {}  // 완료 버튼 제거로 인해 빈 람다로 설정
-                )
+                if (contractId != null) {
+                    DocumentUploadScreen(
+                        documentType = type,
+                        title = title,
+                        description = description,
+                        contract = contract,
+                        contractId = contractId!!,
+                        firebaseStorageUtil = firebaseStorageUtil,
+                        firestoreUtil = firestoreUtil,
+                        onContractUpdated = { newContract ->
+                            contract = newContract
+                        }
+                    )
+                }
             }
 
             // 하단 네비게이션
@@ -140,7 +167,7 @@ fun OnboardingScanScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 이전 버튼 - 첫 페이지가 아닐 때만 표시
+                // 이전 버튼
                 if (pagerState.currentPage > 0) {
                     TextButton(
                         onClick = {
@@ -152,7 +179,6 @@ fun OnboardingScanScreen(
                         Text("이전", color = Color(0xFF253F5A))
                     }
                 } else {
-                    // 첫 페이지일 때는 빈 공간
                     Spacer(Modifier.width(64.dp))
                 }
 
@@ -200,15 +226,17 @@ fun OnboardingScanScreen(
                 } else {
                     Button(
                         onClick = {
-                            if (documentUploadManager.isReadyForAnalysis()) {
+                            if (isReadyForAnalysis(contract)) {
                                 scope.launch {
                                     try {
                                         showProgress = true
-                                        val groupId = documentUploadManager.getCurrentGroupId()
-                                        val analysisId = DocumentAnalyzer().startAnalysis(documentStatus)
+                                        firestoreUtil.updateContractStatus(
+                                            "test_user",
+                                            contractId!!,
+                                            ContractStatus.PENDING
+                                        )
                                         val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                                            putExtra("analysisId", analysisId)
-                                            putExtra("groupId", groupId)
+                                            putExtra("contractId", contractId)
                                         }
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
@@ -219,7 +247,7 @@ fun OnboardingScanScreen(
                                 }
                             }
                         },
-                        enabled = documentUploadManager.isReadyForAnalysis(),
+                        enabled = isReadyForAnalysis(contract),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF253F5A),
                             disabledContainerColor = Color(0xFFE0E0E0)
@@ -227,7 +255,7 @@ fun OnboardingScanScreen(
                     ) {
                         Text(
                             "분석",
-                            color = if (documentUploadManager.isReadyForAnalysis())
+                            color = if (isReadyForAnalysis(contract))
                                 Color.White
                             else
                                 Color(0xFF9E9E9E)
@@ -252,45 +280,49 @@ fun OnboardingScanScreen(
     }
 }
 
+// 분석 준비 상태 확인 함수
+private fun isReadyForAnalysis(contract: Contract?): Boolean {
+    return contract?.let {
+        it.building_registry.isNotEmpty() &&
+                it.registry_document.isNotEmpty() &&
+                it.contract.isNotEmpty()
+    } ?: false
+}
+
 @Composable
 fun DocumentUploadScreen(
     documentType: String,
     title: String,
     description: String,
-    documentUploadManager: DocumentUploadManager,
+    contract: Contract?,
+    contractId: String,
     firebaseStorageUtil: FirebaseStorageUtil,
     firestoreUtil: FirestoreUtil,
-    onUploadComplete: () -> Unit
+    onContractUpdated: (Contract) -> Unit
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var draggedItem by remember { mutableStateOf<DocumentPreview?>(null) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
     var draggingItem by remember { mutableStateOf<DocumentPreview?>(null) }
     var dropTarget by remember { mutableStateOf<DocumentPreview?>(null) }
-    val density = LocalDensity.current
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
-    // 문서 상태 관찰
-    val documentStatus by documentUploadManager.documentStatus.collectAsState()
-    val uploadedDocuments = remember(documentStatus) {
-        val documents = documentStatus.documentSets[documentType] ?: emptyList()
-        documents.mapIndexed { index, id ->
-            try {
-                val doc = runBlocking {
-                    firestoreUtil.getDocument(id)
-                }
-                DocumentPreview(
-                    id = id,
-                    imageUrl = doc?.getString("imageUrl") ?: "",
-                    pageNumber = index + 1
-                )
-            } catch (e: Exception) {
-                null
-            }
-        }.filterNotNull()
+    // 업로드된 문서 목록
+    val uploadedDocuments = remember(contract) {
+        when (documentType) {
+            "building_registry" -> contract?.building_registry
+            "registry_document" -> contract?.registry_document
+            "contract" -> contract?.contract
+            else -> null
+        }?.mapIndexed { index, doc ->
+            DocumentPreview(
+                id = doc.imageUrl,  // URL을 ID로 사용
+                imageUrl = doc.imageUrl,
+                pageNumber = index + 1  // 1부터 시작하는 페이지 번호
+            )
+        }?.sortedBy { it.pageNumber } ?: emptyList()
     }
 
     // 카메라 실행 런처
@@ -301,24 +333,26 @@ fun DocumentUploadScreen(
             coroutineScope.launch {
                 isLoading = true
                 try {
-                    val groupId = documentUploadManager.getCurrentGroupId()
+                    val nextPage = uploadedDocuments.size + 1
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(
                         bitmap = bitmap,
                         documentType = documentType,
-                        groupId = groupId,
-                        pageNumber = uploadedDocuments.size + 1
-                    )
-
-                    val document = ScannedDocument(
-                        type = documentType,
-                        imageUrl = imageUrl,
                         userId = "test_user",
-                        groupId = groupId,
-                        pageNumber = uploadedDocuments.size + 1
+                        contractId = contractId,
+                        pageNumber = nextPage
                     )
 
-                    val documentId = firestoreUtil.saveScannedDocument(document)
-                    documentUploadManager.addDocument(documentType, documentId)
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId,
+                        documentType = documentType,
+                        imageUrl = imageUrl,
+                        pageNumber = nextPage
+                    )
+
+                    // 업데이트된 계약서 정보 로드
+                    val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                    updatedContract?.let { onContractUpdated(it) }
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
                 } finally {
@@ -345,27 +379,30 @@ fun DocumentUploadScreen(
             coroutineScope.launch {
                 isLoading = true
                 try {
-                    val groupId = documentUploadManager.getCurrentGroupId()
-                    uris.forEachIndexed { index, uri ->
+                    var nextPage = uploadedDocuments.size + 1
+                    uris.forEach { uri ->
                         val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
                             uri = uri,
                             context = context,
                             documentType = documentType,
-                            groupId = groupId,
-                            pageNumber = uploadedDocuments.size + index + 1
-                        )
-
-                        val document = ScannedDocument(
-                            type = documentType,
-                            imageUrl = imageUrl,
                             userId = "test_user",
-                            groupId = groupId,
-                            pageNumber = uploadedDocuments.size + index + 1
+                            contractId = contractId,
+                            pageNumber = nextPage
                         )
 
-                        val documentId = firestoreUtil.saveScannedDocument(document)
-                        documentUploadManager.addDocument(documentType, documentId)
+                        firestoreUtil.addDocumentToContract(
+                            userId = "test_user",
+                            contractId = contractId,
+                            documentType = documentType,
+                            imageUrl = imageUrl,
+                            pageNumber = nextPage
+                        )
+                        nextPage++
                     }
+
+                    // 업데이트된 계약서 정보 로드
+                    val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                    updatedContract?.let { onContractUpdated(it) }
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
                 } finally {
@@ -434,12 +471,22 @@ fun DocumentUploadScreen(
                             onDelete = {
                                 coroutineScope.launch {
                                     try {
-                                        documentUploadManager.removeDocumentWithStorage(
+                                        // Storage에서 파일 삭제
+                                        firebaseStorageUtil.deleteDocument(
+                                            contractId,
                                             documentType,
-                                            document.id,
-                                            firebaseStorageUtil,
-                                            firestoreUtil
+                                            document.pageNumber
                                         )
+                                        // Contract에서 문서 제거
+                                        firestoreUtil.removeDocumentFromContract(
+                                            "test_user",
+                                            contractId,
+                                            documentType,
+                                            document.pageNumber
+                                        )
+                                        // 업데이트된 계약서 정보 로드
+                                        val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                                        updatedContract?.let { onContractUpdated(it) }
                                     } catch (e: Exception) {
                                         errorMessage = "문서 삭제 실패: ${e.message}"
                                     }
@@ -453,13 +500,16 @@ fun DocumentUploadScreen(
                                     if (fromIndex != -1 && toIndex != -1 && fromIndex != toIndex) {
                                         coroutineScope.launch {
                                             try {
-                                                documentUploadManager.reorderDocuments(
+                                                firestoreUtil.reorderDocumentInContract(
+                                                    "test_user",
+                                                    contractId,
                                                     documentType,
-                                                    fromIndex,
-                                                    toIndex,
-                                                    firebaseStorageUtil,
-                                                    firestoreUtil
+                                                    fromIndex + 1,
+                                                    toIndex + 1
                                                 )
+                                                // 업데이트된 계약서 정보 로드
+                                                val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                                                updatedContract?.let { onContractUpdated(it) }
                                             } catch (e: Exception) {
                                                 errorMessage = "문서 순서 변경 실패: ${e.message}"
                                             }
@@ -494,7 +544,7 @@ fun DocumentUploadScreen(
                     }
                 }
             }
-        }else {
+        } else {
             Box(
                 modifier = Modifier
                     .weight(1f)
