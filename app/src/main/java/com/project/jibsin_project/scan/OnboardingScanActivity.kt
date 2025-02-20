@@ -466,29 +466,29 @@ fun DocumentUploadScreen(
                                 }
                             }
                     ) {
+                        var deletingDocumentId by remember { mutableStateOf<String?>(null) }
+
                         DocumentPreviewItem(
                             document = document,
+                            isDeleting = deletingDocumentId == document.id,  // 로딩 상태 전달
                             onDelete = {
                                 coroutineScope.launch {
                                     try {
-                                        // Storage에서 파일 삭제
-                                        firebaseStorageUtil.deleteDocument(
-                                            contractId,
-                                            documentType,
-                                            document.pageNumber
-                                        )
-                                        // Contract에서 문서 제거
+                                        deletingDocumentId = document.id  // 현재 문서 삭제 중 표시
                                         firestoreUtil.removeDocumentFromContract(
-                                            "test_user",
-                                            contractId,
-                                            documentType,
-                                            document.pageNumber
+                                            userId = "test_user",
+                                            contractId = contractId,
+                                            documentType = documentType,
+                                            pageNumber = document.pageNumber,
+                                            firebaseStorageUtil = firebaseStorageUtil
                                         )
                                         // 업데이트된 계약서 정보 로드
                                         val updatedContract = firestoreUtil.getContract("test_user", contractId)
                                         updatedContract?.let { onContractUpdated(it) }
                                     } catch (e: Exception) {
                                         errorMessage = "문서 삭제 실패: ${e.message}"
+                                    } finally {
+                                        deletingDocumentId = null  // 로딩 상태 해제
                                     }
                                 }
                             },
@@ -640,6 +640,7 @@ fun DocumentUploadScreen(
 @Composable
 fun DocumentPreviewItem(
     document: DocumentPreview,
+    isDeleting: Boolean = false,
     onDelete: () -> Unit,
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit,
@@ -692,18 +693,27 @@ fun DocumentPreviewItem(
         )
 
         // 삭제 버튼
-        IconButton(
-            onClick = onDelete,
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(24.dp)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Delete",
-                tint = Color.Black,
-                modifier = Modifier.size(16.dp)
-            )
+            if (isDeleting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFF253F5A)
+                )
+            } else {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Delete",
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 

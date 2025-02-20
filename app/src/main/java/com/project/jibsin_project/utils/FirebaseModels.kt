@@ -108,7 +108,8 @@ class FirestoreUtil {
         userId: String,
         contractId: String,
         documentType: String,
-        pageNumber: Int
+        pageNumber: Int,
+        firebaseStorageUtil: FirebaseStorageUtil
     ) {
         try {
             val contractRef = db.collection("users")
@@ -126,17 +127,50 @@ class FirestoreUtil {
                 else -> throw IllegalArgumentException("Invalid document type")
             }.toMutableList()
 
+            // 삭제할 문서 제거
             updatedDocs.removeIf { it.pageNumber == pageNumber }
 
-            // 페이지 번호 재정렬
-            updatedDocs.forEachIndexed { index, doc ->
-                if (doc.pageNumber > pageNumber) {
-                    updatedDocs[index] = doc.copy(pageNumber = doc.pageNumber - 1)
+            // Storage에서 현재 파일 삭제
+            firebaseStorageUtil.deleteDocument(
+                contractId = contractId,
+                documentType = documentType,
+                pageNumber = pageNumber
+            )
+
+            // 남은 문서들의 페이지 번호와 파일 이름 업데이트
+            for (i in pageNumber..updatedDocs.size) {
+                val doc = updatedDocs.find { it.pageNumber == i + 1 } ?: continue
+
+                // Storage의 파일 이름 업데이트
+                val newUrl = firebaseStorageUtil.updatePageNumber(
+                    contractId = contractId,
+                    documentType = documentType,
+                    oldPageNumber = i + 1,
+                    newPageNumber = i
+                )
+
+                // DocumentInfo 업데이트
+                val docIndex = updatedDocs.indexOfFirst { it.pageNumber == i + 1 }
+                if (docIndex != -1) {
+                    updatedDocs[docIndex] = doc.copy(
+                        pageNumber = i,
+                        imageUrl = newUrl
+                    )
                 }
             }
+
+            // 문서 순서대로 정렬
             updatedDocs.sortBy { it.pageNumber }
 
-            contractRef.update(documentType, updatedDocs).await()
+            // Contract 업데이트
+            val updateData = when (documentType) {
+                "building_registry" -> mapOf("building_registry" to updatedDocs)
+                "registry_document" -> mapOf("registry_document" to updatedDocs)
+                "contract" -> mapOf("contract" to updatedDocs)
+                else -> throw IllegalArgumentException("Invalid document type")
+            }
+
+            contractRef.update(updateData).await()
         } catch (e: Exception) {
             throw e
         }
