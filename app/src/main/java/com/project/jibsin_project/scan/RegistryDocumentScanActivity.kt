@@ -22,36 +22,42 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.project.jibsin_project.utils.ContractManager
 import com.project.jibsin_project.utils.FirebaseStorageUtil
-import com.project.jibsin_project.utils.FirestoreUtil
-import com.project.jibsin_project.utils.ScannedDocument
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.util.UUID
 
 class RegistryDocumentScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
-    private val firestoreUtil = FirestoreUtil()
+    private val contractManager = ContractManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            RegistryDocumentScanScreen(firebaseStorageUtil, firestoreUtil)
+            RegistryDocumentScanScreen(contractManager, firebaseStorageUtil)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
+fun RegistryDocumentScanScreen(contractManager: ContractManager, firebaseStorageUtil: FirebaseStorageUtil) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val userId = "test_user"
 
-    val hasPermission = remember {
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
+    // 각 스캔 세션에 대한 고유 그룹 ID 생성
+    val groupId = remember { UUID.randomUUID().toString() }
+    var currentPage by remember { mutableStateOf(1) }
+
+    // 계약 ID 생성
+    val contractId = remember {
+        runBlocking {
+            contractManager.createContract(userId)
+        }
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -61,18 +67,26 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImage(bitmap, "registry_document")
-                    val document = ScannedDocument(
-                        type = "registry_document",
-                        imageUrl = imageUrl,
-                        userId = "test_user" // TODO: 실제 사용자 ID로 교체
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(
+                        bitmap = bitmap,
+                        documentType = "contract",
+                        contractId = contractId,
+                        pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
+
+                    contractManager.addDocument(
+                        userId = userId,
+                        contractId = contractId,
+                        documentType = "contract",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+                    currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "registry_document")
+                        putExtra("contractId", contractId)
+                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -90,18 +104,27 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadImageFromUri(uri, context, "registry_document")
-                    val document = ScannedDocument(
-                        type = "registry_document",
-                        imageUrl = imageUrl,
-                        userId = "test_user" // TODO: 실제 사용자 ID로 교체
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
+                        uri = uri,
+                        context = context,
+                        documentType = "contract",
+                        contractId = contractId,
+                        pageNumber = currentPage
                     )
-                    val documentId = firestoreUtil.saveScannedDocument(document)
+
+                    contractManager.addDocument(
+                        userId = userId,
+                        contractId = contractId,
+                        documentType = "contract",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+                    currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                        putExtra("documentId", documentId)
-                        putExtra("documentType", "registry_document")
+                        putExtra("contractId", contractId)
+                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -179,6 +202,6 @@ fun RegistryDocumentScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firesto
 fun PreviewRegistryDocumentScanScreen() {
     RegistryDocumentScanScreen(
         firebaseStorageUtil = FirebaseStorageUtil(),
-        firestoreUtil = FirestoreUtil()
+        contractManager = ContractManager()
     )
 }

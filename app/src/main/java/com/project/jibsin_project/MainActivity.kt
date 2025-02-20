@@ -7,13 +7,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import com.google.firebase.FirebaseApp
 import com.project.jibsin_project.Home.HomeScreen
 import com.project.jibsin_project.login.LoginScreen
 import com.project.jibsin_project.login.SignUpScreen
+import com.project.jibsin_project.utils.ContractManager
+import com.project.jibsin_project.utils.DocumentUploadManager
+import com.project.jibsin_project.utils.FirebaseStorageUtil
 
 class MainActivity : ComponentActivity() {
+    private val documentUploadManager = DocumentUploadManager.getInstance()
+    private val firebaseStorageUtil = FirebaseStorageUtil()
+    private val contractManager = ContractManager()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Firebase 초기화
+        FirebaseApp.initializeApp(this)
+
         setContent {
             MyApp() // MyApp에서 상태바 색상과 UI를 설정
         }
@@ -22,6 +34,8 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MyApp() {
+    val documentUploadManager = remember { DocumentUploadManager.getInstance() }
+
     // 상태바 설정
     val systemUiController = rememberSystemUiController()
     systemUiController.setSystemBarsColor(
@@ -30,29 +44,25 @@ fun MyApp() {
     )
 
     // 네비게이션 및 UI 구성
-    AppNavigation()
+    AppNavigation(documentUploadManager)
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(documentUploadManager: DocumentUploadManager) {
     var isSignUpScreen by remember { mutableStateOf(false) }
     var isLoggedIn by remember { mutableStateOf(false) }
 
     if (isLoggedIn) {
-        // 로그인 성공 후 홈 화면
         HomeScreen(
             onMonthlyRentClick = { /* 월세 화면 이동 처리 */ },
-            onLeaseClick = { /* 전세 화면 이동 처리 */ },
-            onChatBotClick= { /* 챗봇 화면 이동 처리 */ }
+            onLeaseClick = { /* 전세 화면 이동 처리 */ }
         )
     } else if (isSignUpScreen) {
-        // 회원가입 화면
         SignUpScreen(onSignUpComplete = { isSignUpScreen = false })
     } else {
-        // 로그인 화면
         LoginScreen(
             onNavigateToSignUp = { isSignUpScreen = true },
-            onLoginSuccess = { isLoggedIn = true } // 로그인 성공 처리
+            onLoginSuccess = { isLoggedIn = true }
         )
     }
 }
@@ -60,5 +70,5 @@ fun AppNavigation() {
 @Preview(showBackground = true)
 @Composable
 fun PreviewAppNavigation() {
-    AppNavigation()
+    AppNavigation(DocumentUploadManager.getInstance())
 }
