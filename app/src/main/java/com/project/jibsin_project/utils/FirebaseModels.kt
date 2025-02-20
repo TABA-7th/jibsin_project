@@ -27,7 +27,7 @@ data class Contract(
     val building_registry: List<DocumentInfo> = listOf(),
     val registry_document: List<DocumentInfo> = listOf(),
     val contract: List<DocumentInfo> = listOf(),
-    val status: String = ContractStatus.SCANNING.name,
+    val analysisStatus: String = "processing",
     val createDate: Timestamp = Timestamp.now()
 )
 
