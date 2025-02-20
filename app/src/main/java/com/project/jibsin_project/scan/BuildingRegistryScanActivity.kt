@@ -1,6 +1,7 @@
 package com.project.jibsin_project.scan
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
@@ -22,25 +23,45 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.project.jibsin_project.utils.FirebaseStorageUtil
+import com.project.jibsin_project.utils.FirestoreUtil
+import com.project.jibsin_project.utils.ContractStatus
 import kotlinx.coroutines.launch
 
 class BuildingRegistryScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
+    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            BuildingRegistryScanScreen(firebaseStorageUtil)
+            BuildingRegistryScanScreen(firebaseStorageUtil, firestoreUtil)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
+fun BuildingRegistryScanScreen(
+    firebaseStorageUtil: FirebaseStorageUtil,
+    firestoreUtil: FirestoreUtil
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var currentPage by remember { mutableStateOf(1) }
+
+    // contractId 상태 관리
+    var contractId by remember { mutableStateOf<String?>(null) }
+
+    // 컴포넌트가 처음 생성될 때 새로운 계약서 문서 생성
+    LaunchedEffect(Unit) {
+        try {
+            contractId = firestoreUtil.createNewContract("test_user")
+        } catch (e: Exception) {
+            errorMessage = "계약서 생성 실패: ${e.message}"
+        }
+    }
 
     // 카메라 권한 상태 체크
     val hasPermission = remember {
@@ -54,15 +75,35 @@ fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+        if (bitmap != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadScannedImage(bitmap, "building_registry")
-                    // TODO: Firestore에 문서 정보 저장
+                    val imageUrl = firebaseStorageUtil.uploadScannedImage(
+                        bitmap = bitmap,
+                        documentType = "building_registry",
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        pageNumber = currentPage
+                    )
+
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        documentType = "building_registry",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+
+                    currentPage++
                     isLoading = false
+
+                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                        putExtra("contractId", contractId)
+                    }
+                    context.startActivity(intent)
                 } catch (e: Exception) {
-                    // TODO: 에러 처리
+                    errorMessage = "업로드 실패: ${e.message}"
                     isLoading = false
                 }
             }
@@ -73,15 +114,36 @@ fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
+        if (uri != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
-                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(uri, context, "building_registry")
-                    // TODO: Firestore에 문서 정보 저장
+                    val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
+                        uri = uri,
+                        context = context,
+                        documentType = "building_registry",
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        pageNumber = currentPage
+                    )
+
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
+                        documentType = "building_registry",
+                        imageUrl = imageUrl,
+                        pageNumber = currentPage
+                    )
+
+                    currentPage++
                     isLoading = false
+
+                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                        putExtra("contractId", contractId)
+                    }
+                    context.startActivity(intent)
                 } catch (e: Exception) {
-                    // TODO: 에러 처리
+                    errorMessage = "업로드 실패: ${e.message}"
                     isLoading = false
                 }
             }
@@ -129,6 +191,15 @@ fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
                 ) {
                     Text("갤러리에서 업로드", color = Color.White, fontSize = 16.sp)
                 }
+
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = it,
+                        color = Color.Red,
+                        fontSize = 14.sp
+                    )
+                }
             }
 
             // 로딩 인디케이터
@@ -145,5 +216,8 @@ fun BuildingRegistryScanScreen(firebaseStorageUtil: FirebaseStorageUtil) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewBuildingRegistryScanScreen() {
-    BuildingRegistryScanScreen(FirebaseStorageUtil())
+    BuildingRegistryScanScreen(
+        firebaseStorageUtil = FirebaseStorageUtil(),
+        firestoreUtil = FirestoreUtil()
+    )
 }
