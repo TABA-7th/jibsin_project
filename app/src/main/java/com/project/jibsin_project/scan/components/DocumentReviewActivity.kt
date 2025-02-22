@@ -52,13 +52,19 @@ fun DocumentReviewScreen(contractId: String) {
             while (true) {
                 val currentContract = firestoreUtil.getContract("test_user", contractId)
                 if (currentContract?.analysisStatus == "completed") {
+                    // 로그 추가
+                    println("=== Document URLs ===")
+                    println("Building Registry: ${currentContract.building_registry.map { it.imageUrl }}")
+                    println("Registry Document: ${currentContract.registry_document.map { it.imageUrl }}")
+                    println("Contract: ${currentContract.contract.map { it.imageUrl }}")
+                    println("==================")
+
                     contract = currentContract
                     analysisResult = currentContract.analysisResult
                     break
                 }
                 delay(2000)
             }
-
             isLoading = false
         } catch (e: Exception) {
             errorMessage = "분석 결과를 불러오는 중 오류가 발생했습니다: ${e.message}"
@@ -104,60 +110,72 @@ fun DocumentReviewScreen(contractId: String) {
                 ) {
                     // 현재 문서 미리보기
                     contract?.let { currentContract ->
-                        analysisResult?.let { result ->
-                            val currentDocType = documentTypes[currentDocumentIndex]
-                            val documents = when (currentDocType) {
-                                "building_registry" -> currentContract.building_registry
-                                "registry_document" -> currentContract.registry_document
-                                "contract" -> currentContract.contract
-                                else -> listOf()
-                            }
+                        val currentDocType = documentTypes[currentDocumentIndex]
+                        val documents = when (currentDocType) {
+                            "building_registry" -> currentContract.building_registry
+                            "registry_document" -> currentContract.registry_document
+                            "contract" -> currentContract.contract
+                            else -> listOf()
+                        }
 
-                            documents.firstOrNull()?.let { doc ->
+                        // 문서 정보 로그
+                        println("=== Current Document ===")
+                        println("Type: $currentDocType")
+                        println("Documents: $documents")
+                        println("==================")
+
+                        documents.firstOrNull()?.let { doc ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
                                 DocumentPreviewWithNotices(
                                     imageUrl = doc.imageUrl,
-                                    notices = extractNoticesFromAnalysisResult(result).filter {
+                                    notices = extractNoticesFromAnalysisResult(analysisResult ?: mapOf()).filter {
                                         it.documentType == currentDocType
                                     },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxWidth()
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
+                        }
 
-                            // 다음/완료 버튼
-                            Button(
+                        // 네비게이션 버튼
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    if (currentDocumentIndex > 0) currentDocumentIndex--
+                                },
+                                enabled = currentDocumentIndex > 0
+                            ) {
+                                Text("이전 페이지")
+                            }
+
+                            TextButton(
                                 onClick = {
                                     if (currentDocumentIndex < documentTypes.size - 1) {
-                                        // 다음 문서로 이동
                                         currentDocumentIndex++
                                     } else {
-                                        // 모든 문서 검토 완료, 분석 결과 화면으로 이동
                                         val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                                             putExtra("contractId", contractId)
                                         }
                                         context.startActivity(intent)
                                         (context as? Activity)?.finish()
                                     }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF253F5A)
-                                )
+                                }
                             ) {
-                                Text(
-                                    if (currentDocumentIndex < documentTypes.size - 1) "다음" else "완료",
-                                    color = Color.White
-                                )
+                                Text(if (currentDocumentIndex < documentTypes.size - 1) "다음 페이지" else "완료")
                             }
                         }
                     }
                 }
             }
 
-            // 에러 메시지
             errorMessage?.let { message ->
                 ErrorDialog(
                     message = message,
