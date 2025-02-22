@@ -18,8 +18,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 
 data class Notice(
+    val documentType: String,
     val boundingBox: BoundingBox,
     val notice: String,
+    val text: String,
     val solution: String
 )
 

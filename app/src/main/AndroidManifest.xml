@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.project.jibsin_project">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- 카메라 권한 -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
@@ -19,6 +21,7 @@
         android:label="집신"
         android:supportsRtl="true"
         android:theme="@style/Theme.Jibsin_project"
+        android:usesCleartextTraffic="true"
         >
 
         <!-- 앱 시작 시 열리는 화면 -->
@@ -47,6 +50,7 @@
         <activity android:name=".scan.OnboardingScanActivity" />
         <activity android:name=".chatbot.ChatBotActivity" />
         <activity android:name=".scan.AIAnalysisResultActivity" />
+        <activity android:name=".scan.components.DocumentReviewActivity" />
 
     </application>
 
