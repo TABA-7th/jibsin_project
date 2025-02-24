@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.project.jibsin_project.utils.BoundingBox
 
 data class Notice(
     val documentType: String,
@@ -42,20 +43,24 @@ fun DocumentPreviewWithNotices(
     var expandedNoticeId by remember { mutableStateOf<Int?>(null) }
     val density = LocalDensity.current
 
-    Box(modifier = modifier.fillMaxWidth()) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
         // 문서 이미지
         AsyncImage(
             model = imageUrl,
             contentDescription = "Document preview",
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .onGloballyPositioned { coordinates ->
                     imageSize = Size(
                         coordinates.size.width.toFloat(),
                         coordinates.size.height.toFloat()
                     )
                 },
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.FillWidth
         )
 
         // 알림 아이콘과 툴팁
@@ -100,25 +105,42 @@ fun DocumentPreviewWithNotices(
                             Column(
                                 modifier = Modifier.padding(16.dp)
                             ) {
-                                Text(
-                                    text = "주의",
-                                    color = Color(0xFFFF9800),
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    text = notice.notice,
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "해결 방법",
-                                    color = Color(0xFF4CAF50),
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    text = notice.solution,
-                                    fontSize = 14.sp
-                                )
+                                // 원본 텍스트
+                                if (notice.text.isNotEmpty()) {
+                                    Text(
+                                        text = notice.text,
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
+
+                                // 알림 내용이 있는 경우만 표시
+                                if (notice.notice.isNotEmpty()) {
+                                    Text(
+                                        text = "주의",
+                                        color = Color(0xFFFF9800),
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = notice.notice,
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                        fontSize = 14.sp
+                                    )
+                                }
+
+                                // 해결방법이 있는 경우만 표시
+                                if (notice.solution.isNotEmpty()) {
+                                    Text(
+                                        text = "해결 방법",
+                                        color = Color(0xFF4CAF50),
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = notice.solution,
+                                        fontSize = 14.sp
+                                    )
+                                }
                             }
                         }
                     }

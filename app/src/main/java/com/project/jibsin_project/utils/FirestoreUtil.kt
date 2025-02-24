@@ -1,9 +1,9 @@
 package com.project.jibsin_project.utils
 
 import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.project.jibsin_project.utils.BoundingBox
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -365,6 +365,52 @@ class FirestoreUtil {
             }.await()
         } catch (e: Exception) {
             throw e
+        }
+    }
+
+    suspend fun getBuildingRegistryAnalysis(userId: String, contractId: String): List<BoundingBox> {
+        return try {
+            val result = mutableListOf<BoundingBox>()
+
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("contracts")
+                .document(contractId)
+                .collection("AI_analysis")
+                .get()
+                .await()
+
+            for (doc in snapshot.documents) {
+                val analysisData = doc.data ?: continue
+                val resultData = analysisData["result"] as? Map<*, *> ?: continue
+                val buildingRegistry = resultData["building_registry"] as? Map<*, *> ?: continue
+                val page1 = buildingRegistry["page1"] as? Map<*, *> ?: continue
+
+                // 🔥 "page1" 내부의 모든 키를 순회하면서 bounding_box 탐색
+                for ((_, sectionData) in page1) {
+                    if (sectionData is Map<*, *>) {
+                        val bboxData = sectionData["bounding_box"] as? Map<*, *>
+                        if (bboxData != null) {
+                            result.add(
+                                BoundingBox(
+                                    x1 = (bboxData["x1"] as? Number)?.toInt() ?: 0,
+                                    y1 = (bboxData["y1"] as? Number)?.toInt() ?: 0,
+                                    x2 = (bboxData["x2"] as? Number)?.toInt() ?: 0,
+                                    y2 = (bboxData["y2"] as? Number)?.toInt() ?: 0
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 🔥 바운딩 박스 데이터 확인 로그 추가
+            println("🔥 Firestore에서 최종 가져온 바운딩 박스 리스트: $result")
+
+            result
+        } catch (e: Exception) {
+            println("🔥 Firestore에서 바운딩 박스 데이터를 가져오는 중 오류 발생: ${e.message}")
+            emptyList()
         }
     }
 }

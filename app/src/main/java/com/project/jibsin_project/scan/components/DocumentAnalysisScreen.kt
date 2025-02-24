@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.project.jibsin_project.utils.Contract
+import com.project.jibsin_project.utils.BoundingBox
 
 // 사용 예시
 @Composable
