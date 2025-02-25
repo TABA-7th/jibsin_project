@@ -61,31 +61,6 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
     val docTypeKeys = listOf("building_registry", "registry_document", "contract")
     var showNotices by remember { mutableStateOf(true) } // 알림 표시 여부 상태
 
-    // 테스트용 데이터 생성 함수 - private 키워드 제거
-    fun createTestNotices(documentType: String, count: Int): List<Notice> {
-        val result = mutableListOf<Notice>()
-        for (i in 0 until count) {
-            // 바운딩 박스를 문서 내 다양한 위치에 분산
-            val x1 = (i * 100) % 1000
-            val y1 = 100 + (i * 150) % 1000
-            result.add(
-                Notice(
-                    documentType = documentType,
-                    boundingBox = BoundingBox(
-                        x1 = x1,
-                        y1 = y1,
-                        x2 = x1 + 200,
-                        y2 = y1 + 50
-                    ),
-                    notice = "테스트 알림 내용 #$i - 주의해야 할 내용입니다.",
-                    text = "원본 텍스트 #$i",
-                    solution = "해결 방법 #$i"
-                )
-            )
-        }
-        return result
-    }
-
     // 계약 데이터 로드
     LaunchedEffect(contractId) {
         isLoading = true
