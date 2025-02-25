@@ -368,7 +368,12 @@ class FirestoreUtil {
         }
     }
 
-    suspend fun getBuildingRegistryAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
+    // 건축물대장 특정 페이지 분석 데이터 가져오기
+    suspend fun getBuildingRegistryAnalysis(
+        userId: String,
+        contractId: String,
+        pageNumber: Int
+    ): Pair<List<BoundingBox>, Pair<Float, Float>> {
         return try {
             val result = mutableListOf<BoundingBox>()
             var imageWidth = 1f
@@ -386,17 +391,20 @@ class FirestoreUtil {
                 val analysisData = doc.data ?: continue
                 val resultData = analysisData["result"] as? Map<*, *> ?: continue
                 val buildingRegistry = resultData["building_registry"] as? Map<*, *> ?: continue
-                val page1 = buildingRegistry["page1"] as? Map<*, *> ?: continue
 
-                // 이미지 사이즈 가져오기
-                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                // 요청된 페이지 데이터 가져오기
+                val pageName = "page$pageNumber"
+                val pageData = buildingRegistry[pageName] as? Map<*, *> ?: continue
+
+                // 이미지 크기 정보 가져오기
+                val imageDimensions = pageData["image_dimensions"] as? Map<*, *>
                 if (imageDimensions != null) {
                     imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
                     imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
                 }
 
-                // 🔥 "page1" 내부의 모든 키를 순회하면서 bounding_box 탐색
-                for ((_, sectionData) in page1) {
+                // 페이지 내부의 모든 섹션 순회하며 바운딩 박스 찾기
+                for ((_, sectionData) in pageData) {
                     if (sectionData is Map<*, *>) {
                         val bboxData = sectionData["bounding_box"] as? Map<*, *>
                         if (bboxData != null) {
@@ -413,19 +421,22 @@ class FirestoreUtil {
                 }
             }
 
-            // 🔥 최종 가져온 데이터 로그
-            println("🔥 Firestore에서 가져온 이미지 크기: width=$imageWidth, height=$imageHeight")
-            println("🔥 Firestore에서 가져온 바운딩 박스 리스트: $result")
+            println("건축물대장 페이지 $pageNumber 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("건축물대장 페이지 $pageNumber 바운딩 박스 리스트: $result")
 
             Pair(result, Pair(imageWidth, imageHeight))
         } catch (e: Exception) {
-            println("🔥 Firestore에서 데이터 가져오는 중 오류 발생: ${e.message}")
+            println("건축물대장 페이지 $pageNumber 데이터 가져오는 중 오류 발생: ${e.message}")
             Pair(emptyList(), Pair(1f, 1f))
         }
     }
 
-        // 등기부등본 분석 데이터 가져오기
-    suspend fun getRegistryDocumentAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
+    // 등기부등본 특정 페이지 분석 데이터 가져오기
+    suspend fun getRegistryDocumentAnalysis(
+        userId: String,
+        contractId: String,
+        pageNumber: Int
+    ): Pair<List<BoundingBox>, Pair<Float, Float>> {
         return try {
             val result = mutableListOf<BoundingBox>()
             var imageWidth = 1f
@@ -444,18 +455,19 @@ class FirestoreUtil {
                 val resultData = analysisData["result"] as? Map<*, *> ?: continue
                 val registryDocument = resultData["registry_document"] as? Map<*, *> ?: continue
 
-                // 첫 페이지 데이터 가져오기
-                val page1 = registryDocument["page1"] as? Map<*, *> ?: continue
+                // 요청된 페이지 데이터 가져오기
+                val pageName = "page$pageNumber"
+                val pageData = registryDocument[pageName] as? Map<*, *> ?: continue
 
                 // 이미지 크기 정보 가져오기
-                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                val imageDimensions = pageData["image_dimensions"] as? Map<*, *>
                 if (imageDimensions != null) {
                     imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
                     imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
                 }
 
                 // 페이지 내부의 모든 섹션 순회하며 바운딩 박스 찾기
-                for ((_, sectionData) in page1) {
+                for ((_, sectionData) in pageData) {
                     if (sectionData is Map<*, *>) {
                         val bboxData = sectionData["bounding_box"] as? Map<*, *>
                         if (bboxData != null) {
@@ -472,18 +484,22 @@ class FirestoreUtil {
                 }
             }
 
-            println("등기부등본 이미지 크기: width=$imageWidth, height=$imageHeight")
-            println("등기부등본 바운딩 박스 리스트: $result")
+            println("등기부등본 페이지 $pageNumber 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("등기부등본 페이지 $pageNumber 바운딩 박스 리스트: $result")
 
             Pair(result, Pair(imageWidth, imageHeight))
         } catch (e: Exception) {
-            println("등기부등본 데이터 가져오는 중 오류 발생: ${e.message}")
+            println("등기부등본 페이지 $pageNumber 데이터 가져오는 중 오류 발생: ${e.message}")
             Pair(emptyList(), Pair(1f, 1f))
         }
     }
 
-    // 계약서 분석 데이터 가져오기
-    suspend fun getContractAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
+    // 계약서 특정 페이지 분석 데이터 가져오기
+    suspend fun getContractAnalysis(
+        userId: String,
+        contractId: String,
+        pageNumber: Int
+    ): Pair<List<BoundingBox>, Pair<Float, Float>> {
         return try {
             val result = mutableListOf<BoundingBox>()
             var imageWidth = 1f
@@ -502,18 +518,19 @@ class FirestoreUtil {
                 val resultData = analysisData["result"] as? Map<*, *> ?: continue
                 val contractDocument = resultData["contract"] as? Map<*, *> ?: continue
 
-                // 첫 페이지 데이터 가져오기
-                val page1 = contractDocument["page1"] as? Map<*, *> ?: continue
+                // 요청된 페이지 데이터 가져오기
+                val pageName = "page$pageNumber"
+                val pageData = contractDocument[pageName] as? Map<*, *> ?: continue
 
                 // 이미지 크기 정보 가져오기
-                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                val imageDimensions = pageData["image_dimensions"] as? Map<*, *>
                 if (imageDimensions != null) {
                     imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
                     imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
                 }
 
                 // 페이지 내부의 모든 섹션 순회하며 바운딩 박스 찾기
-                for ((_, sectionData) in page1) {
+                for ((_, sectionData) in pageData) {
                     if (sectionData is Map<*, *>) {
                         val bboxData = sectionData["bounding_box"] as? Map<*, *>
                         if (bboxData != null) {
@@ -530,12 +547,12 @@ class FirestoreUtil {
                 }
             }
 
-            println("계약서 이미지 크기: width=$imageWidth, height=$imageHeight")
-            println("계약서 바운딩 박스 리스트: $result")
+            println("계약서 페이지 $pageNumber 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("계약서 페이지 $pageNumber 바운딩 박스 리스트: $result")
 
             Pair(result, Pair(imageWidth, imageHeight))
         } catch (e: Exception) {
-            println("계약서 데이터 가져오는 중 오류 발생: ${e.message}")
+            println("계약서 페이지 $pageNumber 데이터 가져오는 중 오류 발생: ${e.message}")
             Pair(emptyList(), Pair(1f, 1f))
         }
     }

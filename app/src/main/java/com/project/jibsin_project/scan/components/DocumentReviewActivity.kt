@@ -20,6 +20,7 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.BoundingBox
+import com.project.jibsin_project.utils.Contract
 
 class DocumentReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,77 +28,125 @@ class DocumentReviewActivity : ComponentActivity() {
         val contractId = intent.getStringExtra("contractId") ?: return
 
         setContent {
-            DocumentReviewScreen(contractId)
+            MultiPageDocumentReviewScreen(contractId)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentReviewScreen(contractId: String) {
-    var currentDocumentIndex by remember { mutableStateOf(0) }
+fun MultiPageDocumentReviewScreen(contractId: String) {
     val firestoreUtil = remember { FirestoreUtil() }
-    val documents = listOf("building_registry", "registry_document", "contract")
+    var contract by remember { mutableStateOf<Contract?>(null) }
+    var currentDocumentType by remember { mutableStateOf("building_registry") }
+    var currentPageIndex by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
-    var imageUrl by remember { mutableStateOf<String?>(null) }
     var boundingBoxes by remember { mutableStateOf(emptyList<BoundingBox>()) }
     var imageWidth by remember { mutableStateOf(0f) }
     var imageHeight by remember { mutableStateOf(0f) }
     var imageWidthPx by remember { mutableStateOf(0) }
     var imageHeightPx by remember { mutableStateOf(0) }
     val context = LocalContext.current
+    val docTypeTabItems = listOf("건축물대장", "등기부등본", "계약서")
+    val docTypeKeys = listOf("building_registry", "registry_document", "contract")
 
-    // 데이터 로드
-    LaunchedEffect(contractId, currentDocumentIndex) {
+    // 계약 데이터 로드
+    LaunchedEffect(contractId) {
         isLoading = true
-        val documentType = documents[currentDocumentIndex]
-        val contract = firestoreUtil.getContract("test_user", contractId)
+        contract = firestoreUtil.getContract("test_user", contractId)
+        isLoading = false
+    }
 
-        when (documentType) {
-            "building_registry" -> {
-                imageUrl = contract?.building_registry?.firstOrNull()?.imageUrl
-                val (boundingBoxList, dimensions) = firestoreUtil.getBuildingRegistryAnalysis("test_user", contractId)
-                boundingBoxes = boundingBoxList
-                imageWidth = dimensions.first
-                imageHeight = dimensions.second
-            }
-            "registry_document" -> {
-                imageUrl = contract?.registry_document?.firstOrNull()?.imageUrl
-                val (boundingBoxList, dimensions) = firestoreUtil.getRegistryDocumentAnalysis("test_user", contractId)
-                boundingBoxes = boundingBoxList
-                imageWidth = dimensions.first
-                imageHeight = dimensions.second
-            }
-            "contract" -> {
-                imageUrl = contract?.contract?.firstOrNull()?.imageUrl
-                val (boundingBoxList, dimensions) = firestoreUtil.getContractAnalysis("test_user", contractId)
-                boundingBoxes = boundingBoxList
-                imageWidth = dimensions.first
-                imageHeight = dimensions.second
-            }
+    // 현재 문서 및 페이지에 대한 바운딩 박스 로드
+    LaunchedEffect(contractId, currentDocumentType, currentPageIndex) {
+        isLoading = true
+
+        // 현재 문서 타입에 따라 분석 데이터 가져오기
+        val (boxes, dimensions) = when (currentDocumentType) {
+            "building_registry" -> firestoreUtil.getBuildingRegistryAnalysis("test_user", contractId, currentPageIndex + 1)
+            "registry_document" -> firestoreUtil.getRegistryDocumentAnalysis("test_user", contractId, currentPageIndex + 1)
+            "contract" -> firestoreUtil.getContractAnalysis("test_user", contractId, currentPageIndex + 1)
+            else -> Pair(emptyList(), Pair(1f, 1f))
         }
 
+        boundingBoxes = boxes
+        imageWidth = dimensions.first
+        imageHeight = dimensions.second
         isLoading = false
+    }
+
+    // 현재 문서 타입의 총 페이지 수
+    val totalPages = when (currentDocumentType) {
+        "building_registry" -> contract?.building_registry?.size ?: 0
+        "registry_document" -> contract?.registry_document?.size ?: 0
+        "contract" -> contract?.contract?.size ?: 0
+        else -> 0
+    }
+
+    // 현재 문서의 현재 페이지 URL
+    val currentImageUrl = when (currentDocumentType) {
+        "building_registry" -> contract?.building_registry?.getOrNull(currentPageIndex)?.imageUrl
+        "registry_document" -> contract?.registry_document?.getOrNull(currentPageIndex)?.imageUrl
+        "contract" -> contract?.contract?.getOrNull(currentPageIndex)?.imageUrl
+        else -> null
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when (currentDocumentIndex) {
-                            0 -> "건축물대장 검토"
-                            1 -> "등기부등본 검토"
-                            2 -> "계약서 검토"
-                            else -> "문서 검토"
-                        }
+            Column {
+                TopAppBar(
+                    title = {
+                        Text(
+                            when (currentDocumentType) {
+                                "building_registry" -> "건축물대장 검토"
+                                "registry_document" -> "등기부등본 검토"
+                                "contract" -> "계약서 검토"
+                                else -> "문서 검토"
+                            }
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFFF9F9F9),
+                        titleContentColor = Color(0xFF253F5A)
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFFF9F9F9),
-                    titleContentColor = Color(0xFF253F5A)
                 )
-            )
+
+                // 문서 타입 탭
+                TabRow(
+                    selectedTabIndex = docTypeKeys.indexOf(currentDocumentType),
+                    containerColor = Color(0xFF253F5A),
+                    contentColor = Color.White
+                ) {
+                    docTypeTabItems.forEachIndexed { index, title ->
+                        Tab(
+                            selected = docTypeKeys.indexOf(currentDocumentType) == index,
+                            onClick = {
+                                currentDocumentType = docTypeKeys[index]
+                                currentPageIndex = 0  // 문서 타입 변경시 첫 페이지로 이동
+                            },
+                            text = { Text(title) }
+                        )
+                    }
+                }
+
+                // 페이지 정보 표시
+                if (totalPages > 0) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.LightGray.copy(alpha = 0.3f))
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "페이지 ${currentPageIndex + 1} / $totalPages",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF253F5A)
+                        )
+                    }
+                }
+            }
         }
     ) { padding ->
         Box(
@@ -112,12 +161,12 @@ fun DocumentReviewScreen(contractId: String) {
                     modifier = Modifier.align(Alignment.Center),
                     color = Color(0xFF253F5A)
                 )
-            } else if (imageUrl != null) {
+            } else if (currentImageUrl != null) {
                 // 이미지와 바운딩 박스
                 Box(modifier = Modifier.fillMaxSize()) {
                     // 1. 이미지
                     AsyncImage(
-                        model = imageUrl,
+                        model = currentImageUrl,
                         contentDescription = "문서 이미지",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -151,22 +200,48 @@ fun DocumentReviewScreen(contractId: String) {
                 ) {
                     TextButton(
                         onClick = {
-                            if (currentDocumentIndex > 0) {
-                                currentDocumentIndex--
+                            if (currentPageIndex > 0) {
+                                currentPageIndex--
+                            } else {
+                                // 첫 페이지에서 이전 문서 타입의 마지막 페이지로 이동
+                                val currentTypeIndex = docTypeKeys.indexOf(currentDocumentType)
+                                if (currentTypeIndex > 0) {
+                                    val prevType = docTypeKeys[currentTypeIndex - 1]
+                                    currentDocumentType = prevType
+                                    currentPageIndex = when (prevType) {
+                                        "building_registry" -> contract?.building_registry?.size ?: 0
+                                        "registry_document" -> contract?.registry_document?.size ?: 0
+                                        "contract" -> contract?.contract?.size ?: 0
+                                        else -> 0
+                                    } - 1
+                                }
                             }
                         },
-                        enabled = currentDocumentIndex > 0
+                        enabled = currentPageIndex > 0 || docTypeKeys.indexOf(currentDocumentType) > 0,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color(0xFF253F5A)
+                        )
                     ) {
                         Text("이전 페이지")
                     }
 
                     TextButton(
                         onClick = {
-                            if (currentDocumentIndex < documents.size - 1) {
-                                currentDocumentIndex++
+                            if (currentPageIndex < totalPages - 1) {
+                                currentPageIndex++
+                            } else {
+                                // 마지막 페이지에서 다음 문서 타입의 첫 페이지로 이동
+                                val currentTypeIndex = docTypeKeys.indexOf(currentDocumentType)
+                                if (currentTypeIndex < docTypeKeys.size - 1) {
+                                    currentDocumentType = docTypeKeys[currentTypeIndex + 1]
+                                    currentPageIndex = 0
+                                }
                             }
                         },
-                        enabled = currentDocumentIndex < documents.size - 1
+                        enabled = currentPageIndex < totalPages - 1 || docTypeKeys.indexOf(currentDocumentType) < docTypeKeys.size - 1,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color(0xFF253F5A)
+                        )
                     ) {
                         Text("다음 페이지")
                     }
@@ -223,37 +298,6 @@ fun BoundingBoxOverlay(
                             height = with(density) { boxHeight.toDp() }
                         )
                         .border(2.dp, Color.Blue.copy(alpha = 0.7f))
-                )
-            }
-        }
-    }
-}
-
-private fun extractNoticesFromPage(
-    pageData: Map<*, *>,
-    documentType: String,
-    notices: MutableList<Notice>
-) {
-    pageData.forEach { (_, sectionData) ->
-        if (sectionData is Map<*, *>) {
-            val boundingBox = sectionData["bounding_box"] as? Map<*, *>
-            val notice = sectionData["notice"] as? String
-            val text = sectionData["text"] as? String
-
-            if (boundingBox != null && (!notice.isNullOrEmpty() || !text.isNullOrEmpty())) {
-                notices.add(
-                    Notice(
-                        documentType = documentType,
-                        boundingBox = BoundingBox(
-                            x1 = (boundingBox["x1"] as? Number)?.toInt() ?: 0,
-                            x2 = (boundingBox["x2"] as? Number)?.toInt() ?: 0,
-                            y1 = (boundingBox["y1"] as? Number)?.toInt() ?: 0,
-                            y2 = (boundingBox["y2"] as? Number)?.toInt() ?: 0
-                        ),
-                        notice = notice ?: "",
-                        text = text ?: "",
-                        solution = (sectionData["solution"] as? String) ?: ""
-                    )
                 )
             }
         }
