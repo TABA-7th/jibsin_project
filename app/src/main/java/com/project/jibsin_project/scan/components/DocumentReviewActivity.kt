@@ -5,14 +5,18 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.project.jibsin_project.scan.AIAnalysisResultActivity
 import com.project.jibsin_project.utils.Contract
 import com.project.jibsin_project.utils.ErrorDialog
@@ -34,49 +38,27 @@ class DocumentReviewActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentReviewScreen(contractId: String) {
-    var contract by remember { mutableStateOf<Contract?>(null) }
-    var analysisResult by remember { mutableStateOf<Map<String, Any>?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentDocumentIndex by remember { mutableStateOf(0) }
+
+    // Firestore 데이터 불러오기 위한 변수들
     val firestoreUtil = remember { FirestoreUtil() }
-    val context = LocalContext.current
+    var boundingBoxes by remember { mutableStateOf(emptyList<BoundingBox>()) }
+    var imageUrl by remember { mutableStateOf<String?>(null) }
+    var originalWidth by remember { mutableStateOf(1f) }
+    var originalHeight by remember { mutableStateOf(1f) }
 
-    // 문서 타입 리스트
-    val documentTypes = listOf("building_registry", "registry_document", "contract")
-
-    when (documentTypes[currentDocumentIndex]) {
-        "building_registry" -> BuildingRegistryScreen(contractId)
-        //"registry_document" -> RegistryDocumentScreen(contractId)  // 등기부등본 검토 화면 (추후 구현)
-        //"contract" -> ContractReviewScreen(contractId)  // 계약서 검토 화면 (추후 구현)
-    }
-
+    // 데이터 불러오기
     LaunchedEffect(contractId) {
-        try {
-            isLoading = true
+        val contract = firestoreUtil.getContract("test_user", contractId)
+        imageUrl = contract?.building_registry?.firstOrNull()?.imageUrl
 
-            // 분석 결과가 나올 때까지 주기적으로 확인
-            while (true) {
-                val currentContract = firestoreUtil.getContract("test_user", contractId)
-                if (currentContract?.analysisStatus == "completed") {
-                    // 로그 추가
-                    println("=== Document URLs ===")
-                    println("Building Registry: ${currentContract.building_registry.map { it.imageUrl }}")
-                    println("Registry Document: ${currentContract.registry_document.map { it.imageUrl }}")
-                    println("Contract: ${currentContract.contract.map { it.imageUrl }}")
-                    println("==================")
+        val (boundingBoxList, imageSize) = firestoreUtil.getBuildingRegistryAnalysis("test_user", contractId)
+        boundingBoxes = boundingBoxList
+        originalWidth = imageSize.first
+        originalHeight = imageSize.second
 
-                    contract = currentContract
-                    analysisResult = currentContract.analysisResult
-                    break
-                }
-                delay(2000)
-            }
-            isLoading = false
-        } catch (e: Exception) {
-            errorMessage = "분석 결과를 불러오는 중 오류가 발생했습니다: ${e.message}"
-            isLoading = false
-        }
+        println("🔥 데이터 로딩 완료: 바운딩 박스 ${boundingBoxes.size}개")
+        println("🔥 이미지 URL: $imageUrl")
     }
 
     Scaffold(
@@ -104,90 +86,58 @@ fun DocumentReviewScreen(contractId: String) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = Color(0xFF253F5A)
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
-                    // 현재 문서 미리보기
-                    contract?.let { currentContract ->
-                        val currentDocType = documentTypes[currentDocumentIndex]
-                        val documents = when (currentDocType) {
-                            "building_registry" -> currentContract.building_registry
-                            "registry_document" -> currentContract.registry_document
-                            "contract" -> currentContract.contract
-                            else -> listOf()
+            when (currentDocumentIndex) {
+                0 -> {
+                    // 건축물대장 화면
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.LightGray)
+                    ) {
+                        // 레이어 1: 이미지
+                        imageUrl?.let { url ->
+                            AsyncImage(
+                                model = url,
+                                contentDescription = "건축물대장",
+                                modifier = Modifier.fillMaxWidth(),
+                                contentScale = ContentScale.FillWidth
+                            )
                         }
 
-                        // 문서 정보 로그
-                        println("=== Current Document ===")
-                        println("Type: $currentDocType")
-                        println("Documents: $documents")
-                        println("==================")
+                        // 레이어 2: 테스트용 빨간 박스
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .background(Color.Red.copy(alpha = 0.5f))
+                                .align(Alignment.Center)
+                        )
 
-                        documents.firstOrNull()?.let { doc ->
+                        // 레이어 3: 바운딩 박스들
+                        boundingBoxes.forEach { bbox ->
+                            val scaleX = 0.5f  // 이미지 스케일에 맞게 수정 필요
+                            val scaleY = 0.5f  // 이미지 스케일에 맞게 수정 필요
+
+                            val width = (bbox.x2 - bbox.x1) * scaleX
+                            val height = (bbox.y2 - bbox.y1) * scaleY
+
                             Box(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                            ) {
-                                DocumentPreviewWithNotices(
-                                    imageUrl = doc.imageUrl,
-                                    notices = extractNoticesFromAnalysisResult(analysisResult ?: mapOf()).filter {
-                                        it.documentType == currentDocType
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-
-                        // 네비게이션 버튼
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    if (currentDocumentIndex > 0) currentDocumentIndex--
-                                },
-                                enabled = currentDocumentIndex > 0
-                            ) {
-                                Text("이전 페이지")
-                            }
-
-                            TextButton(
-                                onClick = {
-                                    if (currentDocumentIndex < documentTypes.size - 1) {
-                                        currentDocumentIndex++
-                                    } else {
-                                        val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                                            putExtra("contractId", contractId)
-                                        }
-                                        context.startActivity(intent)
-                                        (context as? Activity)?.finish()
-                                    }
-                                }
-                            ) {
-                                Text(if (currentDocumentIndex < documentTypes.size - 1) "다음 페이지" else "완료")
-                            }
+                                    .offset(
+                                        x = (bbox.x1 * scaleX).dp,
+                                        y = (bbox.y1 * scaleY).dp
+                                    )
+                                    .size(
+                                        width = width.dp,
+                                        height = height.dp
+                                    )
+                                    .border(2.dp, Color.Blue.copy(alpha = 0.7f))
+                            )
                         }
                     }
                 }
-            }
-
-            errorMessage?.let { message ->
-                ErrorDialog(
-                    message = message,
-                    onDismiss = { errorMessage = null }
-                )
+                else -> {
+                    // 다른 문서 화면 (나중에 구현)
+                }
             }
         }
     }

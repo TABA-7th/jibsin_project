@@ -368,9 +368,11 @@ class FirestoreUtil {
         }
     }
 
-    suspend fun getBuildingRegistryAnalysis(userId: String, contractId: String): List<BoundingBox> {
+    suspend fun getBuildingRegistryAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
         return try {
             val result = mutableListOf<BoundingBox>()
+            var imageWidth = 1f
+            var imageHeight = 1f
 
             val snapshot = db.collection("users")
                 .document(userId)
@@ -385,6 +387,13 @@ class FirestoreUtil {
                 val resultData = analysisData["result"] as? Map<*, *> ?: continue
                 val buildingRegistry = resultData["building_registry"] as? Map<*, *> ?: continue
                 val page1 = buildingRegistry["page1"] as? Map<*, *> ?: continue
+
+                // 🔥 "image_dimensions" 가져오기
+                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                if (imageDimensions != null) {
+                    imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
+                    imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
+                }
 
                 // 🔥 "page1" 내부의 모든 키를 순회하면서 bounding_box 탐색
                 for ((_, sectionData) in page1) {
@@ -404,13 +413,14 @@ class FirestoreUtil {
                 }
             }
 
-            // 🔥 바운딩 박스 데이터 확인 로그 추가
-            println("🔥 Firestore에서 최종 가져온 바운딩 박스 리스트: $result")
+            // 🔥 최종 가져온 데이터 로그
+            println("🔥 Firestore에서 가져온 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("🔥 Firestore에서 가져온 바운딩 박스 리스트: $result")
 
-            result
+            Pair(result, Pair(imageWidth, imageHeight))
         } catch (e: Exception) {
-            println("🔥 Firestore에서 바운딩 박스 데이터를 가져오는 중 오류 발생: ${e.message}")
-            emptyList()
+            println("🔥 Firestore에서 데이터 가져오는 중 오류 발생: ${e.message}")
+            Pair(emptyList(), Pair(1f, 1f))
         }
     }
 }
