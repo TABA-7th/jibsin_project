@@ -58,6 +58,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.project.jibsin_project.api.RetrofitClient
+import com.project.jibsin_project.api.model.AnalysisRequest
+import com.project.jibsin_project.scan.components.DocumentReviewActivity
 
 class OnboardingScanActivity : ComponentActivity() {
     private val firebaseStorageUtil = FirebaseStorageUtil()
@@ -96,9 +99,9 @@ fun OnboardingScanScreen(
     }
 
     val pages = listOf(
-        Triple("building_registry", "건축물대장", "건축물대장을 업로드하세요."),
-        Triple("registry_document", "등기부등본", "등기부등본을 업로드하세요."),
-        Triple("contract", "계약서", "계약서를 업로드하세요.")
+        Triple("building_registry", "건축물대장", "건축물대장을 순서대로 업로드하세요."),
+        Triple("registry_document", "등기부등본", "등기부등본을 순서대로 업로드하세요."),
+        Triple("contract", "계약서", "계약서를 순서대로 업로드하세요.")
     )
 
     // 계약서 데이터 상태 관찰
@@ -230,17 +233,50 @@ fun OnboardingScanScreen(
                                 scope.launch {
                                     try {
                                         showProgress = true
-                                        firestoreUtil.updateContractStatus(
-                                            "test_user",
-                                            contractId!!,
-                                            ContractStatus.PENDING
+
+                                        // 백엔드 서버에 분석 요청
+                                        val analysisRequest = AnalysisRequest(
+                                            userId = "test_user",
+                                            contractId = contractId!!
+//                                            buildingRegistryUrl = contract?.building_registry?.firstOrNull()?.imageUrl,
+//                                            registryDocumentUrl = contract?.registry_document?.firstOrNull()?.imageUrl,
+//                                            contractUrl = contract?.contract?.firstOrNull()?.imageUrl
                                         )
-                                        val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                                            putExtra("contractId", contractId)
+
+                                        // 요청 내용 로그 추가
+                                        println("=== Analysis Request Log ===")
+                                        println("userId: ${analysisRequest.userId}")
+                                        println("contractId: ${analysisRequest.contractId}")
+//                                        println("buildingRegistryUrl: ${analysisRequest.buildingRegistryUrl}")
+//                                        println("registryDocumentUrl: ${analysisRequest.registryDocumentUrl}")
+//                                        println("contractUrl: ${analysisRequest.contractUrl}")
+                                        println("=========================")
+
+                                        val response = RetrofitClient.apiService.startAnalysis(analysisRequest)
+
+                                        if (response.success) {
+                                            // Firestore 상태 업데이트
+                                            firestoreUtil.updateContractStatus(
+                                                "test_user",
+                                                contractId!!,
+                                                ContractStatus.PENDING
+                                            )
+
+                                            // DocumentReviewActivity로 이동
+                                            val intent = Intent(context, DocumentReviewActivity::class.java).apply {
+                                                putExtra("contractId", contractId)
+                                            }
+                                            context.startActivity(intent)
+                                        } else {
+                                            errorMessage = "분석 요청 실패: ${response.message}"
                                         }
-                                        context.startActivity(intent)
                                     } catch (e: Exception) {
                                         errorMessage = "분석 요청 실패: ${e.message}"
+                                        // 에러 로그 추가
+                                        println("=== Analysis Request Error ===")
+                                        println("Error: ${e.message}")
+                                        e.printStackTrace()
+                                        println("=========================")
                                     } finally {
                                         showProgress = false
                                     }
@@ -466,29 +502,29 @@ fun DocumentUploadScreen(
                                 }
                             }
                     ) {
+                        var deletingDocumentId by remember { mutableStateOf<String?>(null) }
+
                         DocumentPreviewItem(
                             document = document,
+                            isDeleting = deletingDocumentId == document.id,  // 로딩 상태 전달
                             onDelete = {
                                 coroutineScope.launch {
                                     try {
-                                        // Storage에서 파일 삭제
-                                        firebaseStorageUtil.deleteDocument(
-                                            contractId,
-                                            documentType,
-                                            document.pageNumber
-                                        )
-                                        // Contract에서 문서 제거
+                                        deletingDocumentId = document.id  // 현재 문서 삭제 중 표시
                                         firestoreUtil.removeDocumentFromContract(
-                                            "test_user",
-                                            contractId,
-                                            documentType,
-                                            document.pageNumber
+                                            userId = "test_user",
+                                            contractId = contractId,
+                                            documentType = documentType,
+                                            pageNumber = document.pageNumber,
+                                            firebaseStorageUtil = firebaseStorageUtil
                                         )
                                         // 업데이트된 계약서 정보 로드
                                         val updatedContract = firestoreUtil.getContract("test_user", contractId)
                                         updatedContract?.let { onContractUpdated(it) }
                                     } catch (e: Exception) {
                                         errorMessage = "문서 삭제 실패: ${e.message}"
+                                    } finally {
+                                        deletingDocumentId = null  // 로딩 상태 해제
                                     }
                                 }
                             },
@@ -640,6 +676,7 @@ fun DocumentUploadScreen(
 @Composable
 fun DocumentPreviewItem(
     document: DocumentPreview,
+    isDeleting: Boolean = false,
     onDelete: () -> Unit,
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit,
@@ -692,18 +729,27 @@ fun DocumentPreviewItem(
         )
 
         // 삭제 버튼
-        IconButton(
-            onClick = onDelete,
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(24.dp)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Delete",
-                tint = Color.Black,
-                modifier = Modifier.size(16.dp)
-            )
+            if (isDeleting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFF253F5A)
+                )
+            } else {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Delete",
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 

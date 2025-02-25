@@ -25,11 +25,11 @@ fun ErrorDialog(
 
 @Composable
 fun ProgressDialog(
-    message: String = "처리 중입니다..."
+    message: String = "처리 중입니다... \n5분정도 소요될 수 있습니다."
 ) {
     AlertDialog(
         onDismissRequest = { },
-        title = { Text("잠시만 기다려주세요") },
+        title = { Text("잠시만 기다려주세요 :)") },
         text = { Text(message) },
         confirmButton = { }
     )
