@@ -7,12 +7,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -34,9 +36,12 @@ data class BoundingBox(
 )
 
 @Composable
-fun DocumentPreviewWithNotices(
+fun DocumentWithNotices(
+    documentType: String,
     imageUrl: String,
     notices: List<Notice>,
+    originalWidth: Float,
+    originalHeight: Float,
     modifier: Modifier = Modifier
 ) {
     var imageSize by remember { mutableStateOf(Size(0f, 0f)) }
@@ -53,7 +58,7 @@ fun DocumentPreviewWithNotices(
             model = imageUrl,
             contentDescription = "Document preview",
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .onGloballyPositioned { coordinates ->
                     imageSize = Size(
                         coordinates.size.width.toFloat(),
@@ -64,9 +69,16 @@ fun DocumentPreviewWithNotices(
         )
 
         // 알림 아이콘과 툴팁
-        notices.forEachIndexed { index, notice ->
-            if (imageSize.width > 0 && imageSize.height > 0) {
-                val position = calculatePosition(notice.boundingBox, imageSize)
+        if (imageSize.width > 0 && imageSize.height > 0) {
+            notices.forEachIndexed { index, notice ->
+                // 화면 크기에 맞게 위치 계산
+                val widthRatio = imageSize.width / originalWidth
+                val heightRatio = imageSize.height / originalHeight
+
+                val position = Offset(
+                    x = notice.boundingBox.x1 * widthRatio,
+                    y = notice.boundingBox.y1 * heightRatio
+                )
 
                 Box(
                     modifier = Modifier
@@ -91,10 +103,18 @@ fun DocumentPreviewWithNotices(
 
                     // 알림 내용 (클릭 시 표시)
                     if (expandedNoticeId == index) {
+                        val cardWidth = 200.dp
+                        // 카드가 화면 바깥으로 나가지 않도록 위치 조정
+                        val isRightSide = position.x > imageSize.width / 2
+
                         Card(
                             modifier = Modifier
-                                .width(200.dp)
-                                .padding(top = 32.dp),
+                                .width(cardWidth)
+                                .padding(top = 32.dp)
+                                .align(if (isRightSide) Alignment.TopEnd else Alignment.TopStart)
+                                .offset(
+                                    x = if (isRightSide) (-cardWidth) else 0.dp
+                                ),
                             colors = CardDefaults.cardColors(
                                 containerColor = Color.White
                             ),
@@ -105,6 +125,18 @@ fun DocumentPreviewWithNotices(
                             Column(
                                 modifier = Modifier.padding(16.dp)
                             ) {
+                                // 문서 타입
+                                Text(
+                                    text = when(documentType) {
+                                        "building_registry" -> "건축물대장"
+                                        "registry_document" -> "등기부등본"
+                                        "contract" -> "계약서"
+                                        else -> "문서"
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+
                                 // 원본 텍스트
                                 if (notice.text.isNotEmpty()) {
                                     Text(
@@ -120,7 +152,8 @@ fun DocumentPreviewWithNotices(
                                     Text(
                                         text = "주의",
                                         color = Color(0xFFFF9800),
-                                        style = MaterialTheme.typography.titleSmall
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
                                     )
                                     Text(
                                         text = notice.notice,
@@ -134,7 +167,8 @@ fun DocumentPreviewWithNotices(
                                     Text(
                                         text = "해결 방법",
                                         color = Color(0xFF4CAF50),
-                                        style = MaterialTheme.typography.titleSmall
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
                                     )
                                     Text(
                                         text = notice.solution,

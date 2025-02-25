@@ -1,7 +1,5 @@
 package com.project.jibsin_project.scan.components
 
-import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,14 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
-import com.project.jibsin_project.scan.AIAnalysisResultActivity
-import com.project.jibsin_project.utils.Contract
-import com.project.jibsin_project.utils.ErrorDialog
 import com.project.jibsin_project.utils.FirestoreUtil
-import kotlinx.coroutines.delay
 import com.project.jibsin_project.utils.BoundingBox
 
 class DocumentReviewActivity : ComponentActivity() {
@@ -39,26 +36,48 @@ class DocumentReviewActivity : ComponentActivity() {
 @Composable
 fun DocumentReviewScreen(contractId: String) {
     var currentDocumentIndex by remember { mutableStateOf(0) }
-
-    // Firestore 데이터 불러오기 위한 변수들
     val firestoreUtil = remember { FirestoreUtil() }
-    var boundingBoxes by remember { mutableStateOf(emptyList<BoundingBox>()) }
+    val documents = listOf("building_registry", "registry_document", "contract")
+    var isLoading by remember { mutableStateOf(true) }
     var imageUrl by remember { mutableStateOf<String?>(null) }
-    var originalWidth by remember { mutableStateOf(1f) }
-    var originalHeight by remember { mutableStateOf(1f) }
+    var boundingBoxes by remember { mutableStateOf(emptyList<BoundingBox>()) }
+    var imageWidth by remember { mutableStateOf(0f) }
+    var imageHeight by remember { mutableStateOf(0f) }
+    var imageWidthPx by remember { mutableStateOf(0) }
+    var imageHeightPx by remember { mutableStateOf(0) }
+    val context = LocalContext.current
 
-    // 데이터 불러오기
-    LaunchedEffect(contractId) {
+    // 데이터 로드
+    LaunchedEffect(contractId, currentDocumentIndex) {
+        isLoading = true
+        val documentType = documents[currentDocumentIndex]
         val contract = firestoreUtil.getContract("test_user", contractId)
-        imageUrl = contract?.building_registry?.firstOrNull()?.imageUrl
 
-        val (boundingBoxList, imageSize) = firestoreUtil.getBuildingRegistryAnalysis("test_user", contractId)
-        boundingBoxes = boundingBoxList
-        originalWidth = imageSize.first
-        originalHeight = imageSize.second
+        when (documentType) {
+            "building_registry" -> {
+                imageUrl = contract?.building_registry?.firstOrNull()?.imageUrl
+                val (boundingBoxList, dimensions) = firestoreUtil.getBuildingRegistryAnalysis("test_user", contractId)
+                boundingBoxes = boundingBoxList
+                imageWidth = dimensions.first
+                imageHeight = dimensions.second
+            }
+            "registry_document" -> {
+                imageUrl = contract?.registry_document?.firstOrNull()?.imageUrl
+                val (boundingBoxList, dimensions) = firestoreUtil.getRegistryDocumentAnalysis("test_user", contractId)
+                boundingBoxes = boundingBoxList
+                imageWidth = dimensions.first
+                imageHeight = dimensions.second
+            }
+            "contract" -> {
+                imageUrl = contract?.contract?.firstOrNull()?.imageUrl
+                val (boundingBoxList, dimensions) = firestoreUtil.getContractAnalysis("test_user", contractId)
+                boundingBoxes = boundingBoxList
+                imageWidth = dimensions.first
+                imageHeight = dimensions.second
+            }
+        }
 
-        println("🔥 데이터 로딩 완료: 바운딩 박스 ${boundingBoxes.size}개")
-        println("🔥 이미지 URL: $imageUrl")
+        isLoading = false
     }
 
     Scaffold(
@@ -85,92 +104,129 @@ fun DocumentReviewScreen(contractId: String) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(Color.LightGray)
         ) {
-            when (currentDocumentIndex) {
-                0 -> {
-                    // 건축물대장 화면
-                    Box(
+            // 로딩 인디케이터
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color(0xFF253F5A)
+                )
+            } else if (imageUrl != null) {
+                // 이미지와 바운딩 박스
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // 1. 이미지
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "문서 이미지",
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.LightGray)
-                    ) {
-                        // 레이어 1: 이미지
-                        imageUrl?.let { url ->
-                            AsyncImage(
-                                model = url,
-                                contentDescription = "건축물대장",
-                                modifier = Modifier.fillMaxWidth(),
-                                contentScale = ContentScale.FillWidth
-                            )
-                        }
+                            .fillMaxWidth()
+                            .zIndex(1f)
+                            .onGloballyPositioned { coordinates ->
+                                imageWidthPx = coordinates.size.width
+                                imageHeightPx = coordinates.size.height
+                            },
+                        contentScale = ContentScale.FillWidth
+                    )
 
-                        // 레이어 2: 테스트용 빨간 박스
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .background(Color.Red.copy(alpha = 0.5f))
-                                .align(Alignment.Center)
+                    // 2. 바운딩 박스 오버레이
+                    if (boundingBoxes.isNotEmpty() && imageWidth > 0 && imageHeight > 0 && imageWidthPx > 0) {
+                        BoundingBoxOverlay(
+                            boundingBoxes = boundingBoxes,
+                            originalWidth = imageWidth,
+                            originalHeight = imageHeight,
+                            displayWidth = imageWidthPx.toFloat(),
+                            displayHeight = imageHeightPx.toFloat()
                         )
-
-                        // 레이어 3: 바운딩 박스들
-                        boundingBoxes.forEach { bbox ->
-                            val scaleX = 0.5f  // 이미지 스케일에 맞게 수정 필요
-                            val scaleY = 0.5f  // 이미지 스케일에 맞게 수정 필요
-
-                            val width = (bbox.x2 - bbox.x1) * scaleX
-                            val height = (bbox.y2 - bbox.y1) * scaleY
-
-                            Box(
-                                modifier = Modifier
-                                    .offset(
-                                        x = (bbox.x1 * scaleX).dp,
-                                        y = (bbox.y1 * scaleY).dp
-                                    )
-                                    .size(
-                                        width = width.dp,
-                                        height = height.dp
-                                    )
-                                    .border(2.dp, Color.Blue.copy(alpha = 0.7f))
-                            )
-                        }
                     }
                 }
-                else -> {
-                    // 다른 문서 화면 (나중에 구현)
+
+                // 네비게이션 버튼
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .align(Alignment.BottomCenter),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(
+                        onClick = {
+                            if (currentDocumentIndex > 0) {
+                                currentDocumentIndex--
+                            }
+                        },
+                        enabled = currentDocumentIndex > 0
+                    ) {
+                        Text("이전 페이지")
+                    }
+
+                    TextButton(
+                        onClick = {
+                            if (currentDocumentIndex < documents.size - 1) {
+                                currentDocumentIndex++
+                            }
+                        },
+                        enabled = currentDocumentIndex < documents.size - 1
+                    ) {
+                        Text("다음 페이지")
+                    }
                 }
+            } else {
+                // 이미지가 없는 경우
+                Text(
+                    "문서가 없습니다",
+                    modifier = Modifier.align(Alignment.Center),
+                    style = MaterialTheme.typography.titleLarge
+                )
             }
         }
     }
 }
 
-// Notice 추출 함수를 public으로 변경
-fun extractNoticesFromAnalysisResult(analysisResult: Map<String, Any>): List<Notice> {
-    val notices = mutableListOf<Notice>()
+@Composable
+fun BoundingBoxOverlay(
+    boundingBoxes: List<BoundingBox>,
+    originalWidth: Float,
+    originalHeight: Float,
+    displayWidth: Float,
+    displayHeight: Float
+) {
+    val density = LocalDensity.current
+    val widthRatio = displayWidth / originalWidth
+    val heightRatio = displayHeight / originalHeight
 
-    (analysisResult["result"] as? Map<*, *>)?.let { result ->
-        // 건축물대장 분석
-        (result["building_registry"] as? Map<*, *>)?.forEach { (page, pageData) ->
-            if (pageData is Map<*, *>) {
-                extractNoticesFromPage(pageData, "building_registry", notices)
-            }
-        }
+    Box(
+        modifier = Modifier
+            .size(
+                width = with(density) { displayWidth.toDp() },
+                height = with(density) { displayHeight.toDp() }
+            )
+            .zIndex(2f)
+    ) {
+        boundingBoxes.forEach { bbox ->
+            // 화면에 맞게 바운딩 박스 좌표 조정
+            val boxX = bbox.x1 * widthRatio
+            val boxY = bbox.y1 * heightRatio
+            val boxWidth = (bbox.x2 - bbox.x1) * widthRatio
+            val boxHeight = (bbox.y2 - bbox.y1) * heightRatio
 
-        // 등기부등본 분석
-        (result["registry_document"] as? Map<*, *>)?.forEach { (page, pageData) ->
-            if (pageData is Map<*, *>) {
-                extractNoticesFromPage(pageData, "registry_document", notices)
-            }
-        }
-
-        // 계약서 분석
-        (result["contract"] as? Map<*, *>)?.forEach { (page, pageData) ->
-            if (pageData is Map<*, *>) {
-                extractNoticesFromPage(pageData, "contract", notices)
+            // 바운딩 박스 그리기
+            if (boxWidth > 0 && boxHeight > 0) {
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { boxX.toDp() },
+                            y = with(density) { boxY.toDp() }
+                        )
+                        .size(
+                            width = with(density) { boxWidth.toDp() },
+                            height = with(density) { boxHeight.toDp() }
+                        )
+                        .border(2.dp, Color.Blue.copy(alpha = 0.7f))
+                )
             }
         }
     }
-
-    return notices
 }
 
 private fun extractNoticesFromPage(

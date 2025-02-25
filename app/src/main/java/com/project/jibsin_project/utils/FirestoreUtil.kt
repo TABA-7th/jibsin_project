@@ -388,7 +388,7 @@ class FirestoreUtil {
                 val buildingRegistry = resultData["building_registry"] as? Map<*, *> ?: continue
                 val page1 = buildingRegistry["page1"] as? Map<*, *> ?: continue
 
-                // 🔥 "image_dimensions" 가져오기
+                // 이미지 사이즈 가져오기
                 val imageDimensions = page1["image_dimensions"] as? Map<*, *>
                 if (imageDimensions != null) {
                     imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
@@ -420,6 +420,122 @@ class FirestoreUtil {
             Pair(result, Pair(imageWidth, imageHeight))
         } catch (e: Exception) {
             println("🔥 Firestore에서 데이터 가져오는 중 오류 발생: ${e.message}")
+            Pair(emptyList(), Pair(1f, 1f))
+        }
+    }
+
+        // 등기부등본 분석 데이터 가져오기
+    suspend fun getRegistryDocumentAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
+        return try {
+            val result = mutableListOf<BoundingBox>()
+            var imageWidth = 1f
+            var imageHeight = 1f
+
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("contracts")
+                .document(contractId)
+                .collection("AI_analysis")
+                .get()
+                .await()
+
+            for (doc in snapshot.documents) {
+                val analysisData = doc.data ?: continue
+                val resultData = analysisData["result"] as? Map<*, *> ?: continue
+                val registryDocument = resultData["registry_document"] as? Map<*, *> ?: continue
+
+                // 첫 페이지 데이터 가져오기
+                val page1 = registryDocument["page1"] as? Map<*, *> ?: continue
+
+                // 이미지 크기 정보 가져오기
+                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                if (imageDimensions != null) {
+                    imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
+                    imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
+                }
+
+                // 페이지 내부의 모든 섹션 순회하며 바운딩 박스 찾기
+                for ((_, sectionData) in page1) {
+                    if (sectionData is Map<*, *>) {
+                        val bboxData = sectionData["bounding_box"] as? Map<*, *>
+                        if (bboxData != null) {
+                            result.add(
+                                BoundingBox(
+                                    x1 = (bboxData["x1"] as? Number)?.toInt() ?: 0,
+                                    y1 = (bboxData["y1"] as? Number)?.toInt() ?: 0,
+                                    x2 = (bboxData["x2"] as? Number)?.toInt() ?: 0,
+                                    y2 = (bboxData["y2"] as? Number)?.toInt() ?: 0
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            println("등기부등본 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("등기부등본 바운딩 박스 리스트: $result")
+
+            Pair(result, Pair(imageWidth, imageHeight))
+        } catch (e: Exception) {
+            println("등기부등본 데이터 가져오는 중 오류 발생: ${e.message}")
+            Pair(emptyList(), Pair(1f, 1f))
+        }
+    }
+
+    // 계약서 분석 데이터 가져오기
+    suspend fun getContractAnalysis(userId: String, contractId: String): Pair<List<BoundingBox>, Pair<Float, Float>> {
+        return try {
+            val result = mutableListOf<BoundingBox>()
+            var imageWidth = 1f
+            var imageHeight = 1f
+
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("contracts")
+                .document(contractId)
+                .collection("AI_analysis")
+                .get()
+                .await()
+
+            for (doc in snapshot.documents) {
+                val analysisData = doc.data ?: continue
+                val resultData = analysisData["result"] as? Map<*, *> ?: continue
+                val contractDocument = resultData["contract"] as? Map<*, *> ?: continue
+
+                // 첫 페이지 데이터 가져오기
+                val page1 = contractDocument["page1"] as? Map<*, *> ?: continue
+
+                // 이미지 크기 정보 가져오기
+                val imageDimensions = page1["image_dimensions"] as? Map<*, *>
+                if (imageDimensions != null) {
+                    imageWidth = (imageDimensions["width"] as? Number)?.toFloat() ?: 1f
+                    imageHeight = (imageDimensions["height"] as? Number)?.toFloat() ?: 1f
+                }
+
+                // 페이지 내부의 모든 섹션 순회하며 바운딩 박스 찾기
+                for ((_, sectionData) in page1) {
+                    if (sectionData is Map<*, *>) {
+                        val bboxData = sectionData["bounding_box"] as? Map<*, *>
+                        if (bboxData != null) {
+                            result.add(
+                                BoundingBox(
+                                    x1 = (bboxData["x1"] as? Number)?.toInt() ?: 0,
+                                    y1 = (bboxData["y1"] as? Number)?.toInt() ?: 0,
+                                    x2 = (bboxData["x2"] as? Number)?.toInt() ?: 0,
+                                    y2 = (bboxData["y2"] as? Number)?.toInt() ?: 0
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            println("계약서 이미지 크기: width=$imageWidth, height=$imageHeight")
+            println("계약서 바운딩 박스 리스트: $result")
+
+            Pair(result, Pair(imageWidth, imageHeight))
+        } catch (e: Exception) {
+            println("계약서 데이터 가져오는 중 오류 발생: ${e.message}")
             Pair(emptyList(), Pair(1f, 1f))
         }
     }

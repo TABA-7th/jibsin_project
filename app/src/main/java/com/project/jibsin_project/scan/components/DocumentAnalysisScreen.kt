@@ -26,6 +26,9 @@ fun DocumentAnalysisScreen(
         extractNotices(analysisResult)
     }
 
+    // 원본 이미지 크기 (기본값으로 설정)
+    val defaultImageSize = Pair(1000f, 1400f)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -39,9 +42,15 @@ fun DocumentAnalysisScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         contract.building_registry.firstOrNull()?.let { doc ->
-            DocumentPreviewWithNotices(
+            // 건축물대장에 대한 원본 이미지 크기 (분석 결과에서 가져오기)
+            val imageSize = getImageDimensions(analysisResult, "building_registry") ?: defaultImageSize
+
+            DocumentWithNotices(
+                documentType = "building_registry",
                 imageUrl = doc.imageUrl,
                 notices = notices.filter { it.documentType == "building_registry" },
+                originalWidth = imageSize.first,
+                originalHeight = imageSize.second,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(400.dp)
@@ -57,9 +66,15 @@ fun DocumentAnalysisScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         contract.registry_document.firstOrNull()?.let { doc ->
-            DocumentPreviewWithNotices(
+            // 등기부등본에 대한 원본 이미지 크기
+            val imageSize = getImageDimensions(analysisResult, "registry_document") ?: defaultImageSize
+
+            DocumentWithNotices(
+                documentType = "registry_document",
                 imageUrl = doc.imageUrl,
                 notices = notices.filter { it.documentType == "registry_document" },
+                originalWidth = imageSize.first,
+                originalHeight = imageSize.second,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(400.dp)
@@ -75,14 +90,39 @@ fun DocumentAnalysisScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         contract.contract.firstOrNull()?.let { doc ->
-            DocumentPreviewWithNotices(
+            // 계약서에 대한 원본 이미지 크기
+            val imageSize = getImageDimensions(analysisResult, "contract") ?: defaultImageSize
+
+            DocumentWithNotices(
+                documentType = "contract",
                 imageUrl = doc.imageUrl,
                 notices = notices.filter { it.documentType == "contract" },
+                originalWidth = imageSize.first,
+                originalHeight = imageSize.second,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(400.dp)
             )
         }
+    }
+}
+
+// 이미지 크기 정보 가져오기 함수 추가
+private fun getImageDimensions(analysisResult: Map<String, Any>, documentType: String): Pair<Float, Float>? {
+    return try {
+        (analysisResult["result"] as? Map<*, *>)?.let { result ->
+            (result[documentType] as? Map<*, *>)?.let { docData ->
+                (docData["page1"] as? Map<*, *>)?.let { page ->
+                    (page["image_dimensions"] as? Map<*, *>)?.let { dimensions ->
+                        val width = (dimensions["width"] as? Number)?.toFloat() ?: 1000f
+                        val height = (dimensions["height"] as? Number)?.toFloat() ?: 1400f
+                        Pair(width, height)
+                    }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
