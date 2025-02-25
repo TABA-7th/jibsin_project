@@ -82,4 +82,53 @@ class DocumentAnalyzer {
             )
             .await()
     }
+
+    suspend fun updateAnalysisStatus(userId: String, contractId: String): String {
+        try {
+            // 분석 요청 ID 조회
+            val contract = firestore.collection("users")
+                .document(userId)
+                .collection("contracts")
+                .document(contractId)
+                .get()
+                .await()
+                .toObject(Contract::class.java) ?: throw IllegalStateException("Contract not found")
+
+            val analysisId = contract.analysisId
+                ?: throw IllegalStateException("Analysis ID not found")
+
+            // 분석 상태 조회
+            val analysis = firestore.collection("analyses")
+                .document(analysisId)
+                .get()
+                .await()
+
+            val status = analysis.getString("status") ?: "pending"
+
+            // 계약서 상태 업데이트
+            if (status == "completed" && contract.analysisStatus != "COMPLETE") {
+                // 분석 결과 가져오기
+                val result = analysis.get("result") as? Map<String, Any> ?: emptyMap()
+
+                // 계약 업데이트
+                firestore.collection("users")
+                    .document(userId)
+                    .collection("contracts")
+                    .document(contractId)
+                    .update(
+                        mapOf(
+                            "analysisResult" to result,
+                            "status" to ContractStatus.COMPLETE.name
+                        )
+                    )
+                    .await()
+            }
+
+            return status
+        } catch (e: Exception) {
+            println("분석 상태 업데이트 중 오류: ${e.message}")
+            return "error"
+        }
+    }
+
 }

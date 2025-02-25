@@ -3,6 +3,7 @@ package com.project.jibsin_project.utils
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.project.jibsin_project.scan.components.Notice
 import com.project.jibsin_project.utils.BoundingBox
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -24,6 +25,7 @@ enum class ContractStatus {
 
 data class Contract(
     val analysisResult: Map<String, Any>? = null,
+    val analysisId: String? = null,  // 분석 ID
     val building_registry: List<DocumentInfo> = listOf(),
     val registry_document: List<DocumentInfo> = listOf(),
     val contract: List<DocumentInfo> = listOf(),
@@ -554,6 +556,76 @@ class FirestoreUtil {
         } catch (e: Exception) {
             println("계약서 페이지 $pageNumber 데이터 가져오는 중 오류 발생: ${e.message}")
             Pair(emptyList(), Pair(1f, 1f))
+        }
+    }
+
+    // AI 분석 결과에서 알림 데이터 직접 가져오기
+    suspend fun getAIAnalysisNotices(
+        userId: String,
+        contractId: String,
+        documentType: String,
+        pageNumber: Int
+    ): List<Notice> {
+        return try {
+            val notices = mutableListOf<Notice>()
+
+            // AI_analysis 컬렉션에서 문서 가져오기
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("contracts")
+                .document(contractId)
+                .collection("AI_analysis")
+                .get()
+                .await()
+
+            println("AI_analysis 문서 수: ${snapshot.documents.size}")
+
+            // 각 분석 문서에서 알림 데이터 추출
+            for (doc in snapshot.documents) {
+                println("분석 문서 ID: ${doc.id}")
+                val resultData = doc.data?.get("result") as? Map<*, *> ?: continue
+
+                val docTypeData = resultData[documentType] as? Map<*, *> ?: continue
+                val pageName = "page$pageNumber"
+                val pageData = docTypeData[pageName] as? Map<*, *> ?: continue
+
+                println("페이지 데이터 키: ${pageData.keys.joinToString()}")
+
+                // 페이지 내 모든 섹션에서 알림 데이터 찾기
+                pageData.forEach { (sectionKey, sectionValue) ->
+                    if (sectionValue is Map<*, *> && sectionKey.toString() != "image_dimensions") {
+                        // notice 필드가 있는지 확인
+                        val noticeText = sectionValue["notice"] as? String
+                        if (!noticeText.isNullOrEmpty()) {
+                            val boundingBox = sectionValue["bounding_box"] as? Map<*, *>
+                            if (boundingBox != null) {
+                                notices.add(
+                                    Notice(
+                                        documentType = documentType,
+                                        boundingBox = BoundingBox(
+                                            x1 = (boundingBox["x1"] as? Number)?.toInt() ?: 0,
+                                            x2 = (boundingBox["x2"] as? Number)?.toInt() ?: 0,
+                                            y1 = (boundingBox["y1"] as? Number)?.toInt() ?: 0,
+                                            y2 = (boundingBox["y2"] as? Number)?.toInt() ?: 0
+                                        ),
+                                        notice = noticeText,
+                                        text = sectionValue["text"] as? String ?: "",
+                                        solution = sectionValue["solution"] as? String ?: ""
+                                    )
+                                )
+                                println("알림 추가: $noticeText")
+                            }
+                        }
+                    }
+                }
+            }
+
+            println("찾은 알림 수: ${notices.size}")
+            notices
+        } catch (e: Exception) {
+            println("알림 데이터 가져오는 중 오류 발생: ${e.message}")
+            e.printStackTrace()
+            emptyList()
         }
     }
 }
