@@ -10,10 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +47,7 @@ fun WarningHistoryScreen(
     var warnings by remember { mutableStateOf<List<WarningItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val userId = "test_user" // 실제 환경에서는 로그인된 사용자 ID를 사용
 
@@ -61,7 +59,11 @@ fun WarningHistoryScreen(
         coroutineScope.launch {
             try {
                 // Firebase에서 실제 경고 내역 불러오기
-                warnings = firestoreUtil.getWarnings(userId)
+                val allWarnings = firestoreUtil.getWarnings(userId)
+
+                // 중복 경고 필터링 (같은 계약 ID와 동일한 메시지를 가진 경고는 하나만 유지)
+                warnings = removeDuplicateWarnings(allWarnings)
+
                 isLoading = false
             } catch (e: Exception) {
                 // 오류 발생 시 처리
@@ -78,6 +80,18 @@ fun WarningHistoryScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackPressed) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "뒤로가기")
+                    }
+                },
+                actions = {
+                    // 경고가 있을 때만 전체 삭제 버튼 표시
+                    if (warnings.isNotEmpty()) {
+                        IconButton(onClick = { showDeleteAllDialog = true }) {
+                            Icon(
+                                Icons.Filled.DeleteSweep,
+                                contentDescription = "전체 삭제",
+                                tint = Color.Gray
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -126,7 +140,8 @@ fun WarningHistoryScreen(
                                 isLoading = true
                                 loadError = null
                                 try {
-                                    warnings = firestoreUtil.getWarnings(userId)
+                                    val allWarnings = firestoreUtil.getWarnings(userId)
+                                    warnings = removeDuplicateWarnings(allWarnings)
                                     isLoading = false
                                 } catch (e: Exception) {
                                     loadError = "경고 내역을 불러오는 중 오류가 발생했습니다: ${e.message}"
@@ -194,6 +209,64 @@ fun WarningHistoryScreen(
             }
         }
     }
+
+    // 전체 삭제 확인 다이얼로그
+    if (showDeleteAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteAllDialog = false },
+            title = { Text("모든 경고 삭제") },
+            text = { Text("모든 경고 내역을 삭제하시겠습니까? 삭제하면 되돌릴 수 없습니다.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // 모든 경고 삭제 로직
+                        coroutineScope.launch {
+                            isLoading = true
+                            try {
+                                // Firebase에서 모든 경고 삭제
+                                firestoreUtil.deleteAllWarnings(userId)
+
+                                // 삭제 후 로컬 리스트 초기화
+                                warnings = emptyList()
+                                showDeleteAllDialog = false
+                                isLoading = false
+                            } catch (e: Exception) {
+                                // 삭제 중 오류 발생 시 처리
+                                loadError = "경고를 삭제하는 중 오류가 발생했습니다: ${e.message}"
+                                showDeleteAllDialog = false
+                                isLoading = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("삭제", color = Color(0xFFE53935))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteAllDialog = false }) {
+                    Text("취소")
+                }
+            }
+        )
+    }
+}
+
+// 중복된 경고 제거 함수
+fun removeDuplicateWarnings(warnings: List<WarningItem>): List<WarningItem> {
+    val uniqueWarnings = mutableListOf<WarningItem>()
+    val messageContractPairs = mutableSetOf<Pair<String, String>>()
+
+    // 중복 확인을 위해 (계약ID, 메시지) 쌍을 사용
+    for (warning in warnings) {
+        val pair = Pair(warning.contractId, warning.message)
+
+        if (!messageContractPairs.contains(pair)) {
+            messageContractPairs.add(pair)
+            uniqueWarnings.add(warning)
+        }
+    }
+
+    return uniqueWarnings
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -224,8 +297,7 @@ fun WarningHistoryItem(
     val textColor = backgroundColor
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         shape = RoundedCornerShape(12.dp)
@@ -287,14 +359,14 @@ fun WarningHistoryItem(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // 경고 상세 내용
             Text(
                 text = warning.message,
                 fontSize = 14.sp,
                 color = Color.DarkGray,
-                modifier = Modifier.padding(start = 44.dp) // 아이콘 너비 + 간격만큼 들여쓰기
+                modifier = Modifier.padding(start = 44.dp)
             )
 
             // 해결 방안이 있는 경우 표시
@@ -315,14 +387,18 @@ fun WarningHistoryItem(
                 )
             }
 
-            // 문서 출처 정보
+            // 문서 출처 정보 및 계약 ID
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "출처: ${warning.source}",
-                fontSize = 12.sp,
-                color = Color.Gray,
-                modifier = Modifier.padding(start = 44.dp)
-            )
+            Row(
+                modifier = Modifier.padding(start = 44.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "CT-${warning.source}",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
         }
     }
 

@@ -53,17 +53,30 @@ fun ContractHistoryScreen(
     val firestoreUtil = remember { FirestoreUtil() }
     var contracts by remember { mutableStateOf<List<Pair<String, Contract>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     // 계약 내역 로드
     LaunchedEffect(key1 = Unit) {
         isLoading = true
+        loadError = null
+
         coroutineScope.launch {
             try {
-                contracts = firestoreUtil.getAllContracts("test_user")
+                val allContracts = firestoreUtil.getAllContracts("test_user")
+
+                // 등록 문서가 0개인 계약은 필터링
+                contracts = allContracts.filter { (_, contract) ->
+                    val documentCount = contract.building_registry.size +
+                            contract.registry_document.size +
+                            contract.contract.size
+                    documentCount > 0
+                }
+
                 isLoading = false
             } catch (e: Exception) {
                 // 오류 처리
+                loadError = "계약 내역을 불러오는 중 오류가 발생했습니다: ${e.message}"
                 isLoading = false
             }
         }
@@ -96,6 +109,56 @@ fun ContractHistoryScreen(
                     modifier = Modifier.align(Alignment.Center),
                     color = Color(0xFF253F5A)
                 )
+            } else if (loadError != null) {
+                // 오류 발생 시 메시지 표시
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "오류 발생",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Red
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = loadError!!,
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                isLoading = true
+                                loadError = null
+                                try {
+                                    val allContracts = firestoreUtil.getAllContracts("test_user")
+                                    // 등록 문서가 0개인 계약은 필터링
+                                    contracts = allContracts.filter { (_, contract) ->
+                                        val documentCount = contract.building_registry.size +
+                                                contract.registry_document.size +
+                                                contract.contract.size
+                                        documentCount > 0
+                                    }
+                                    isLoading = false
+                                } catch (e: Exception) {
+                                    loadError = "계약 내역을 불러오는 중 오류가 발생했습니다: ${e.message}"
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF253F5A)
+                        )
+                    ) {
+                        Text("다시 시도")
+                    }
+                }
             } else if (contracts.isEmpty()) {
                 // 계약 내역이 없을 때
                 Column(
@@ -166,8 +229,7 @@ fun ContractHistoryItem(
     // 분석 상태에 따른 상태 텍스트 및 색상
     val (statusText, statusColor) = when (contract.analysisStatus) {
         "completed" -> Pair("분석 완료", Color(0xFF4CAF50))
-        "processing" -> Pair("분석 중", Color(0xFFFF9800))
-        else -> Pair("대기 중", Color.Gray)
+        else -> Pair("분석 취소", Color.Gray)
     }
 
     // 문서 수량 계산
@@ -191,14 +253,14 @@ fun ContractHistoryItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 계약서 ID (앞부분만 표시)
+                // 계약서 ID
                 Text(
-                    text = contractId.substringAfter("-").take(10) + "...",
+                    text = contractId.substringAfter("-").take(16),
                     fontSize = 14.sp,
                     color = Color.Gray
                 )
 
-                // 상태 표시 (분석 완료/진행 중/대기 중)
+                // 상태 표시 (분석 완료/분석 취소)
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
@@ -264,7 +326,7 @@ fun ContractHistoryItem(
                 )
             }
 
-            // 분석 결과 요약 (있는 경우)
+            // 분석 결과 요약 (분석 완료인 경우에만)
             if (contract.analysisResult != null && contract.analysisStatus == "completed") {
                 Spacer(modifier = Modifier.height(12.dp))
                 Divider()
@@ -309,7 +371,7 @@ fun ContractHistoryItem(
     }
 }
 
-// 위험 요소 개수 파악 함수 (예시)
+// 위험 요소 개수 파악 함수
 fun getWarningCount(analysisResult: Map<String, Any>?): Int {
     if (analysisResult == null) return 0
 

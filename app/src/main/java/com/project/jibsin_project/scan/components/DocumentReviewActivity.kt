@@ -37,7 +37,6 @@ import com.project.jibsin_project.history.WarningItem
 import com.project.jibsin_project.history.WarningLevel
 import com.project.jibsin_project.scan.AIAnalysisResultActivity
 import com.project.jibsin_project.scan.components.DocumentReviewActivity.Companion.getDocumentTypeKorean
-import com.project.jibsin_project.scan.components.DocumentReviewActivity.Companion.isHighRiskNotice
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.BoundingBox
 import com.project.jibsin_project.utils.Contract
@@ -60,12 +59,13 @@ class DocumentReviewActivity : ComponentActivity() {
     // 문서 타입 한글 명칭 반환 함수
     companion object {
         fun getDocumentTypeKorean(documentType: String): String {
-            return when (documentType) {
+            val docType = when (documentType) {
                 "building_registry" -> "건축물대장"
                 "registry_document" -> "등기부등본"
                 "contract" -> "계약서"
                 else -> documentType
             }
+            return docType
         }
 
         // 높은 위험 알림인지 판단하는 함수
@@ -162,7 +162,7 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                             level = warningLevel,
                             message = notice.notice,
                             solution = notice.solution,
-                            source = DocumentReviewActivity.getDocumentTypeKorean(notice.documentType),
+                            source = "${contractId.split("-").last()} ${getDocumentTypeKorean(notice.documentType)}", // 계약서 번호와 문서 타입 포함
                             date = Date(),
                             contractId = contractId
                         )
@@ -516,8 +516,8 @@ fun CustomScrollbar(
 fun formatSpecialTermText(text: String, key: String = ""): String {
     // "특약사항" 또는 "특약"이 포함된 키인지 확인
     if ((key.contains("특약사항") || key.contains("특약") || text.contains("특약")) && text.length > 100) {
-        // 첫 줄이나 첫 50자까지만 표시
-        val firstPart = text.take(50)
+        // 첫 80자까지만 표시
+        val firstPart = text.take(80)
         return "$firstPart...(이하생략)"
     }
     return text
@@ -881,7 +881,7 @@ fun BoundingBoxOverlay(
                             Icons.Default.Warning,
                             contentDescription = "경고",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp) // 아이콘 내부 크기 조정
+                            modifier = Modifier.size(20.dp) // 아이콘 내부 크기 조정
                         )
                     }
                 }

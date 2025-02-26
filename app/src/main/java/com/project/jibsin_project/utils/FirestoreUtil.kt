@@ -913,10 +913,10 @@ class FirestoreUtil {
                                             if (message.isNotEmpty() && message != "문제 없음") {
                                                 val solution = noticeData["solution"] as? String ?: ""
                                                 val documentSource = when(docType) {
-                                                    "building_registry" -> "건축물대장"
-                                                    "registry_document" -> "등기부등본"
-                                                    "contract" -> "계약서"
-                                                    else -> docType
+                                                    "building_registry" -> "${contractId.split("-").last()} 건축물대장"
+                                                    "registry_document" -> "${contractId.split("-").last()} 등기부등본"
+                                                    "contract" -> "${contractId.split("-").last()} 계약서"
+                                                    else -> "${contractId.split("-").last()} $docType"
                                                 }
 
                                                 // 위험 수준 결정 (특정 키워드에 따라 DANGER로 설정)
@@ -958,5 +958,41 @@ class FirestoreUtil {
         }
 
         return warnings
+    }
+
+    suspend fun deleteAllWarnings(userId: String) {
+        try {
+            // 1. 모든 경고 내역 가져오기
+            val warnings = getWarnings(userId)
+
+            // 2. 경고가 없으면 바로 리턴
+            if (warnings.isEmpty()) {
+                return
+            }
+
+            // 3. 배치 삭제 수행 (Firestore는 한 번에 최대 500개까지 배치 작업 가능)
+            val batchSize = 450 // 안전을 위해 450개로 제한
+
+            // 경고를 배치 크기에 맞게 나누어 삭제
+            warnings.chunked(batchSize).forEach { chunk ->
+                val batch = db.batch()
+
+                // 각 경고에 대한 삭제 작업을 배치에 추가
+                chunk.forEach { warning ->
+                    val warningRef = db.collection("users")
+                        .document(userId)
+                        .collection("warnings")
+                        .document(warning.id)
+
+                    batch.delete(warningRef)
+                }
+
+                // 배치 실행
+                batch.commit().await()
+            }
+        } catch (e: Exception) {
+            println("모든 경고 삭제 중 오류: ${e.message}")
+            throw e
+        }
     }
 }
