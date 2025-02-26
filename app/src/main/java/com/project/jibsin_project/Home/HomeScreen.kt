@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.project.jibsin_project.R
 import com.project.jibsin_project.history.ContractHistoryActivity
+import com.project.jibsin_project.history.WarningHistoryActivity
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,7 +106,9 @@ fun HomeScreen(
                             scope.launch {
                                 drawerState.close()
                             }
-                            // 경고 내역으로 이동하는 코드 추가 (필요시)
+                            // 경고 내역 화면으로 이동
+                            val intent = Intent(context, WarningHistoryActivity::class.java)
+                            context.startActivity(intent)
                         })
                         Divider(color = Color.LightGray, thickness = 1.dp)
                         NavigationMenuItem("나의 계약 내역", onClick = {

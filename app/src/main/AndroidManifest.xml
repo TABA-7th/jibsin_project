@@ -52,6 +52,7 @@
         <activity android:name=".scan.AIAnalysisResultActivity" />
         <activity android:name=".scan.components.DocumentReviewActivity" />
         <activity android:name=".history.ContractHistoryActivity" />
+        <activity android:name=".history.WarningHistoryActivity" />
 
     </application>
 

@@ -3,12 +3,15 @@ package com.project.jibsin_project.utils
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.project.jibsin_project.history.WarningItem
+import com.project.jibsin_project.history.WarningLevel
 import com.project.jibsin_project.scan.components.Notice
 import com.project.jibsin_project.utils.BoundingBox
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 // 기본 데이터 클래스들
 data class DocumentInfo(
@@ -727,4 +730,233 @@ class FirestoreUtil {
         val text: String,
         val boundingBox: BoundingBox
     )
+
+    // 경고 항목 저장하기
+    suspend fun saveWarning(userId: String, warning: WarningItem) {
+        try {
+            val warningMap = mapOf(
+                "id" to warning.id,
+                "level" to warning.level.name,
+                "message" to warning.message,
+                "solution" to warning.solution,
+                "source" to warning.source,
+                "date" to Timestamp(warning.date),
+                "contractId" to warning.contractId
+            )
+
+            db.collection("users")
+                .document(userId)
+                .collection("warnings")
+                .document(warning.id)
+                .set(warningMap)
+                .await()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 경고 내역 불러오기
+    suspend fun getWarnings(userId: String): List<WarningItem> {
+        return try {
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("warnings")
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+
+                try {
+                    WarningItem(
+                        id = data["id"] as? String ?: doc.id,
+                        level = WarningLevel.valueOf(data["level"] as? String ?: WarningLevel.WARNING.name),
+                        message = data["message"] as? String ?: "",
+                        solution = data["solution"] as? String ?: "",
+                        source = data["source"] as? String ?: "",
+                        date = (data["date"] as? Timestamp)?.toDate() ?: Date(),
+                        contractId = data["contractId"] as? String ?: ""
+                    )
+                } catch (e: Exception) {
+                    println("경고 항목 파싱 중 오류: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            println("경고 내역 불러오기 오류: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 특정 계약에 관련된 경고만 불러오기
+    suspend fun getWarningsByContract(userId: String, contractId: String): List<WarningItem> {
+        return try {
+            val snapshot = db.collection("users")
+                .document(userId)
+                .collection("warnings")
+                .whereEqualTo("contractId", contractId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+
+                try {
+                    WarningItem(
+                        id = data["id"] as? String ?: doc.id,
+                        level = WarningLevel.valueOf(data["level"] as? String ?: WarningLevel.WARNING.name),
+                        message = data["message"] as? String ?: "",
+                        solution = data["solution"] as? String ?: "",
+                        source = data["source"] as? String ?: "",
+                        date = (data["date"] as? Timestamp)?.toDate() ?: Date(),
+                        contractId = data["contractId"] as? String ?: ""
+                    )
+                } catch (e: Exception) {
+                    println("경고 항목 파싱 중 오류: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            println("계약별 경고 내역 불러오기 오류: ${e.message}")
+            emptyList()
+        }
+    }
+
+    // 경고 삭제하기
+    suspend fun deleteWarning(userId: String, warningId: String) {
+        try {
+            db.collection("users")
+                .document(userId)
+                .collection("warnings")
+                .document(warningId)
+                .delete()
+                .await()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // 문서 분석 중 발견된 경고를 자동으로 저장
+    suspend fun saveWarningsFromAnalysis(userId: String, contractId: String, analysisResult: Map<String, Any>) {
+        try {
+            // 분석 결과에서 경고 추출
+            val warnings = extractWarningsFromAnalysis(contractId, analysisResult)
+
+            // 각 경고를 저장
+            warnings.forEach { warning ->
+                saveWarning(userId, warning)
+            }
+        } catch (e: Exception) {
+            println("분석 결과에서 경고 저장 중 오류: ${e.message}")
+        }
+    }
+
+    // 분석 결과에서 경고 추출하기
+    private fun extractWarningsFromAnalysis(contractId: String, analysisResult: Map<String, Any>): List<WarningItem> {
+        val warnings = mutableListOf<WarningItem>()
+
+        try {
+            // 분석 결과 구조에 맞게 경고 추출 로직 구현
+            // 예시로는 단순한 구조를 가정함
+
+            // 1. 직접적인 warnings 키에서 추출
+            (analysisResult["warnings"] as? List<*>)?.forEach { warningData ->
+                if (warningData is Map<*, *>) {
+                    val message = warningData["message"] as? String ?: warningData["text"] as? String ?: ""
+                    val solution = warningData["solution"] as? String ?: ""
+                    val source = warningData["source"] as? String ?: "분석 결과"
+                    val level = if (warningData["level"] == "danger" || warningData["level"] == "DANGER") {
+                        WarningLevel.DANGER
+                    } else {
+                        WarningLevel.WARNING
+                    }
+
+                    val warningId = UUID.randomUUID().toString()
+
+                    warnings.add(
+                        WarningItem(
+                            id = warningId,
+                            level = level,
+                            message = message,
+                            solution = solution,
+                            source = source,
+                            date = Date(),
+                            contractId = contractId
+                        )
+                    )
+                }
+            }
+
+            // 2. 중첩된 구조에서도 검색
+            (analysisResult["result"] as? Map<*, *>)?.let { result ->
+                // 각 문서 타입별로 처리
+                val documentTypes = listOf("building_registry", "registry_document", "contract")
+
+                for (docType in documentTypes) {
+                    (result[docType] as? Map<*, *>)?.let { docTypeData ->
+                        // 각 페이지별로 처리
+                        docTypeData.keys.forEach { pageKey ->
+                            if (pageKey.toString().startsWith("page")) {
+                                (docTypeData[pageKey] as? Map<*, *>)?.let { pageData ->
+                                    // 알림 데이터 찾기
+                                    val notices = pageData["notices"] as? List<*>
+                                        ?: pageData["warnings"] as? List<*>
+                                        ?: emptyList<Any>()
+
+                                    notices.forEach { noticeData ->
+                                        if (noticeData is Map<*, *>) {
+                                            val message = noticeData["notice"] as? String
+                                                ?: noticeData["message"] as? String
+                                                ?: noticeData["text"] as? String
+                                                ?: ""
+
+                                            if (message.isNotEmpty() && message != "문제 없음") {
+                                                val solution = noticeData["solution"] as? String ?: ""
+                                                val documentSource = when(docType) {
+                                                    "building_registry" -> "건축물대장"
+                                                    "registry_document" -> "등기부등본"
+                                                    "contract" -> "계약서"
+                                                    else -> docType
+                                                }
+
+                                                // 위험 수준 결정 (특정 키워드에 따라 DANGER로 설정)
+                                                val dangerKeywords = listOf(
+                                                    "보증금", "일치하지 않", "소유자", "임대인", "근저당", "압류",
+                                                    "가압류", "가처분", "경매", "위험"
+                                                )
+
+                                                val isDanger = dangerKeywords.any { keyword ->
+                                                    message.contains(keyword)
+                                                }
+
+                                                val level = if (isDanger) WarningLevel.DANGER else WarningLevel.WARNING
+                                                val warningId = UUID.randomUUID().toString()
+
+                                                warnings.add(
+                                                    WarningItem(
+                                                        id = warningId,
+                                                        level = level,
+                                                        message = message,
+                                                        solution = solution,
+                                                        source = documentSource,
+                                                        date = Date(),
+                                                        contractId = contractId
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            println("경고 추출 중 오류: ${e.message}")
+        }
+
+        return warnings
+    }
 }
