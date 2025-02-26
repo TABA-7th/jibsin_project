@@ -396,7 +396,25 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
+                        .background(Color.White)
                 ) {
+                    // 확대/축소 모드일 때 표시되는 안내 메시지
+                    if (zoomMode) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFEDE7F6))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "핀치로 확대/축소, 드래그로 이동 (${String.format("%.1f", scale)}x)",
+                                color = Color(0xFF3F51B5),
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
                     // 확대/축소 및 알림 토글 버튼 행
                     Row(
                         modifier = Modifier
@@ -465,23 +483,6 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(if (showNotices) "알림 켜짐" else "알림 꺼짐")
                             }
-                        }
-                    }
-
-                    // 확대/축소 모드일 때 표시되는 안내 메시지
-                    if (zoomMode) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFEDE7F6))
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "핀치로 확대/축소, 드래그로 이동 (${String.format("%.1f", scale)}x)",
-                                color = Color(0xFF3F51B5),
-                                fontSize = 14.sp
-                            )
                         }
                     }
 
