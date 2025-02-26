@@ -609,7 +609,7 @@ fun BoundingBoxOverlay(
     val horizontalPadding = 16.dp
     val verticalPadding = 16.dp
     val tooltipHeight = 280.dp
-    val iconSize = 20.dp
+    val iconSize = 24.dp
 
     // dp to pixels 변환 준비
     val cardWidthPx = with(density) { cardWidth.toPx() }
