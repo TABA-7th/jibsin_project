@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -30,13 +31,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -46,19 +51,25 @@ import com.google.accompanist.pager.*
 import com.project.jibsin_project.utils.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.geometry.Offset
+import kotlin.math.roundToInt
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.project.jibsin_project.api.RetrofitClient
+import com.project.jibsin_project.api.model.AnalysisRequest
+import com.project.jibsin_project.scan.components.DocumentReviewActivity
 
 class OnboardingScanActivity : ComponentActivity() {
-    private val contractManager = ContractManager()
     private val firebaseStorageUtil = FirebaseStorageUtil()
+    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            OnboardingScanScreen(contractManager, firebaseStorageUtil)
+            OnboardingScanScreen(firebaseStorageUtil, firestoreUtil)
         }
     }
 }
@@ -66,9 +77,8 @@ class OnboardingScanActivity : ComponentActivity() {
 @OptIn(ExperimentalPagerApi::class)
 @Composable
 fun OnboardingScanScreen(
-    contractManager: ContractManager,
     firebaseStorageUtil: FirebaseStorageUtil,
-    documentUploadManager: DocumentUploadManager = DocumentUploadManager.getInstance()
+    firestoreUtil: FirestoreUtil
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -76,41 +86,41 @@ fun OnboardingScanScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val pagerState = rememberPagerState()
 
-    var isContractInitialized by remember { mutableStateOf(false) }
+    // contractId 상태 관리
+    var contractId by remember { mutableStateOf<String?>(null) }
 
+    // 컴포넌트가 처음 생성될 때 새로운 계약서 문서 생성
     LaunchedEffect(Unit) {
         try {
-            documentUploadManager.createNewContract("test_user")
-            isContractInitialized = true
+            contractId = firestoreUtil.createNewContract("test_user")
         } catch (e: Exception) {
-            errorMessage = "계약 초기화 실패: ${e.message}"
+            errorMessage = "계약서 생성 실패: ${e.message}"
         }
     }
 
     val pages = listOf(
         Triple("building_registry", "건축물대장", "건축물대장을 업로드하세요."),
-        Triple("registry_document", "등기부등본", "등기부등본을 업로드하세요."),
-        Triple("contract", "계약서", "계약서를 업로드하세요.")
+        Triple("registry_document", "등기부등본", "등기부등본을 순서대로 업로드하세요."),
+        Triple("contract", "계약서", "계약서를 순서대로 업로드하세요.")
     )
 
-    // 문서 업로드 상태 관찰
-    val documentStatus by documentUploadManager.documentStatus.collectAsState()
+    // 계약서 데이터 상태 관찰
+    var contract by remember { mutableStateOf<Contract?>(null) }
 
-    // 각 페이지별 문서 업로드 여부 확인
-    val hasUploads = remember(documentStatus) {
-        pages.associate { (type, _, _) ->
-            type to (documentStatus.documentSets[type]?.isNotEmpty() == true)
+    // 계약서 데이터 로드
+    LaunchedEffect(contractId) {
+        if (contractId != null) {
+            contract = firestoreUtil.getContract("test_user", contractId!!)
         }
     }
 
-    if (!isContractInitialized) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = Color(0xFF253F5A))
-        }
-        return
+    // 각 문서 타입별 업로드 여부 확인
+    val hasDocuments = remember(contract) {
+        mapOf(
+            "building_registry" to (contract?.building_registry?.isNotEmpty() ?: false),
+            "registry_document" to (contract?.registry_document?.isNotEmpty() ?: false),
+            "contract" to (contract?.contract?.isNotEmpty() ?: false)
+        )
     }
 
     Scaffold(
@@ -121,6 +131,7 @@ fun OnboardingScanScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // 진행 상태 표시
             LinearProgressIndicator(
                 progress = (pagerState.currentPage + 1) / 3f,
                 modifier = Modifier
@@ -135,14 +146,20 @@ fun OnboardingScanScreen(
                 modifier = Modifier.weight(1f)
             ) { page ->
                 val (type, title, description) = pages[page]
-                DocumentUploadScreen(
-                    documentType = type,
-                    title = title,
-                    description = description,
-                    contractManager = contractManager,
-                    firebaseStorageUtil = firebaseStorageUtil,
-                    documentUploadManager = documentUploadManager
-                )
+                if (contractId != null) {
+                    DocumentUploadScreen(
+                        documentType = type,
+                        title = title,
+                        description = description,
+                        contract = contract,
+                        contractId = contractId!!,
+                        firebaseStorageUtil = firebaseStorageUtil,
+                        firestoreUtil = firestoreUtil,
+                        onContractUpdated = { newContract ->
+                            contract = newContract
+                        }
+                    )
+                }
             }
 
             // 하단 네비게이션
@@ -153,7 +170,7 @@ fun OnboardingScanScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 이전 버튼 - 첫 페이지가 아닐 때만 표시
+                // 이전 버튼
                 if (pagerState.currentPage > 0) {
                     TextButton(
                         onClick = {
@@ -165,7 +182,6 @@ fun OnboardingScanScreen(
                         Text("이전", color = Color(0xFF253F5A))
                     }
                 } else {
-                    // 첫 페이지일 때는 빈 공간
                     Spacer(Modifier.width(64.dp))
                 }
 
@@ -190,51 +206,84 @@ fun OnboardingScanScreen(
                     }
                 }
 
+                // 다음/분석 버튼
                 if (pagerState.currentPage < pages.size - 1) {
                     TextButton(
                         onClick = {
-                            if (hasUploads[pages[pagerState.currentPage].first] == true) {
+                            if (hasDocuments[pages[pagerState.currentPage].first] == true) {
                                 scope.launch {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 }
                             }
                         },
-                        enabled = hasUploads[pages[pagerState.currentPage].first] == true
+                        enabled = hasDocuments[pages[pagerState.currentPage].first] == true
                     ) {
                         Text(
                             "다음",
-                            color = if (hasUploads[pages[pagerState.currentPage].first] == true)
+                            color = if (hasDocuments[pages[pagerState.currentPage].first] == true)
                                 Color(0xFF253F5A)
                             else
                                 Color(0xFFBDBDBD)
                         )
                     }
                 } else {
-                    // 분석 버튼
                     Button(
                         onClick = {
-                            if (documentUploadManager.isReadyForAnalysis()) {
+                            if (isReadyForAnalysis(contract)) {
                                 scope.launch {
                                     try {
                                         showProgress = true
-                                        val contractId = documentUploadManager.getCurrentContractId()
-                                        val userId = documentUploadManager.getCurrentUserId()
-                                        val analysisId = DocumentAnalyzer().startAnalysis(userId, documentStatus)
-                                        val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
-                                            putExtra("analysisId", analysisId)
-                                            putExtra("contractId", contractId)
-                                            putExtra("userId", userId)
+
+                                        // 백엔드 서버에 분석 요청
+                                        val analysisRequest = AnalysisRequest(
+                                            userId = "test_user",
+                                            contractId = contractId!!
+//                                            buildingRegistryUrl = contract?.building_registry?.firstOrNull()?.imageUrl,
+//                                            registryDocumentUrl = contract?.registry_document?.firstOrNull()?.imageUrl,
+//                                            contractUrl = contract?.contract?.firstOrNull()?.imageUrl
+                                        )
+
+                                        // 요청 내용 로그 추가
+                                        println("=== Analysis Request Log ===")
+                                        println("userId: ${analysisRequest.userId}")
+                                        println("contractId: ${analysisRequest.contractId}")
+//                                        println("buildingRegistryUrl: ${analysisRequest.buildingRegistryUrl}")
+//                                        println("registryDocumentUrl: ${analysisRequest.registryDocumentUrl}")
+//                                        println("contractUrl: ${analysisRequest.contractUrl}")
+                                        println("=========================")
+
+                                        val response = RetrofitClient.apiService.startAnalysis(analysisRequest)
+
+                                        if (response.success) {
+                                            // Firestore 상태 업데이트
+                                            firestoreUtil.updateContractStatus(
+                                                "test_user",
+                                                contractId!!,
+                                                ContractStatus.PENDING
+                                            )
+
+                                            // DocumentReviewActivity로 이동
+                                            val intent = Intent(context, DocumentReviewActivity::class.java).apply {
+                                                putExtra("contractId", contractId)
+                                            }
+                                            context.startActivity(intent)
+                                        } else {
+                                            errorMessage = "분석 요청 실패: ${response.message}"
                                         }
-                                        context.startActivity(intent)
                                     } catch (e: Exception) {
                                         errorMessage = "분석 요청 실패: ${e.message}"
+                                        // 에러 로그 추가
+                                        println("=== Analysis Request Error ===")
+                                        println("Error: ${e.message}")
+                                        e.printStackTrace()
+                                        println("=========================")
                                     } finally {
                                         showProgress = false
                                     }
                                 }
                             }
                         },
-                        enabled = documentUploadManager.isReadyForAnalysis(),
+                        enabled = isReadyForAnalysis(contract),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF253F5A),
                             disabledContainerColor = Color(0xFFE0E0E0)
@@ -242,7 +291,7 @@ fun OnboardingScanScreen(
                     ) {
                         Text(
                             "분석",
-                            color = if (documentUploadManager.isReadyForAnalysis())
+                            color = if (isReadyForAnalysis(contract))
                                 Color.White
                             else
                                 Color(0xFF9E9E9E)
@@ -251,31 +300,29 @@ fun OnboardingScanScreen(
                 }
             }
         }
-    }
 
-    if (showProgress) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f)),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(color = Color.White)
+        // 진행 상태 다이얼로그
+        if (showProgress) {
+            ProgressDialog()
+        }
+
+        // 에러 다이얼로그
+        errorMessage?.let { message ->
+            ErrorDialog(
+                message = message,
+                onDismiss = { errorMessage = null }
+            )
         }
     }
+}
 
-    errorMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { errorMessage = null },
-            title = { Text("오류") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
-                    Text("확인")
-                }
-            }
-        )
-    }
+// 분석 준비 상태 확인 함수
+private fun isReadyForAnalysis(contract: Contract?): Boolean {
+    return contract?.let {
+        it.building_registry.isNotEmpty() &&
+                it.registry_document.isNotEmpty() &&
+                it.contract.isNotEmpty()
+    } ?: false
 }
 
 @Composable
@@ -283,42 +330,36 @@ fun DocumentUploadScreen(
     documentType: String,
     title: String,
     description: String,
-    contractManager: ContractManager,
+    contract: Contract?,
+    contractId: String,
     firebaseStorageUtil: FirebaseStorageUtil,
-    documentUploadManager: DocumentUploadManager
+    firestoreUtil: FirestoreUtil,
+    onContractUpdated: (Contract) -> Unit
 ) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val gridState = rememberLazyGridState()
-
-    // 현재 계약 정보 가져오기
-    val contractId = try {
-        documentUploadManager.getCurrentContractId()
-    } catch (e: Exception) {
-        return  // 계약이 초기화되지 않았으면 화면을 표시하지 않음
-    }
-
-    val userId = documentUploadManager.getCurrentUserId()
-
-    // 업로드된 문서 목록
-    val uploadedDocuments = remember(contractId) {
-        runBlocking {
-            val docs = contractManager.getDocuments(userId, contractId, documentType)
-            docs.mapIndexed { index, doc ->
-                DocumentPreview(
-                    id = "${doc.pageNumber}",  // pageNumber를 id로 사용
-                    imageUrl = doc.imageUrl,
-                    pageNumber = doc.pageNumber
-                )
-            }.sortedBy { it.pageNumber }  // 페이지 번호로 정렬
-        }
-    }
-
     var draggingItem by remember { mutableStateOf<DocumentPreview?>(null) }
     var dropTarget by remember { mutableStateOf<DocumentPreview?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // 업로드된 문서 목록
+    val uploadedDocuments = remember(contract) {
+        when (documentType) {
+            "building_registry" -> contract?.building_registry
+            "registry_document" -> contract?.registry_document
+            "contract" -> contract?.contract
+            else -> null
+        }?.mapIndexed { index, doc ->
+            DocumentPreview(
+                id = doc.imageUrl,  // URL을 ID로 사용
+                imageUrl = doc.imageUrl,
+                pageNumber = index + 1  // 1부터 시작하는 페이지 번호
+            )
+        }?.sortedBy { it.pageNumber } ?: emptyList()
+    }
 
     // 카메라 실행 런처
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -328,52 +369,26 @@ fun DocumentUploadScreen(
             coroutineScope.launch {
                 isLoading = true
                 try {
-                    val nextPageNumber = uploadedDocuments.size + 1
+                    val nextPage = uploadedDocuments.size + 1
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(
                         bitmap = bitmap,
                         documentType = documentType,
+                        userId = "test_user",
                         contractId = contractId,
-                        pageNumber = nextPageNumber
+                        pageNumber = nextPage
                     )
 
-                    documentUploadManager.addDocument(
-                        type = documentType,
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId,
+                        documentType = documentType,
                         imageUrl = imageUrl,
-                        pageNumber = nextPageNumber
+                        pageNumber = nextPage
                     )
-                } catch (e: Exception) {
-                    errorMessage = "업로드 실패: ${e.message}"
-                } finally {
-                    isLoading = false
-                }
-            }
-        }
-    }
 
-    // 갤러리 실행 런처
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetMultipleContents()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            coroutineScope.launch {
-                isLoading = true
-                try {
-                    uris.forEachIndexed { index, uri ->
-                        val nextPageNumber = uploadedDocuments.size + index + 1
-                        val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
-                            uri = uri,
-                            context = context,
-                            documentType = documentType,
-                            contractId = contractId,
-                            pageNumber = nextPageNumber
-                        )
-
-                        documentUploadManager.addDocument(
-                            type = documentType,
-                            imageUrl = imageUrl,
-                            pageNumber = nextPageNumber
-                        )
-                    }
+                    // 업데이트된 계약서 정보 로드
+                    val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                    updatedContract?.let { onContractUpdated(it) }
                 } catch (e: Exception) {
                     errorMessage = "업로드 실패: ${e.message}"
                 } finally {
@@ -389,6 +404,47 @@ fun DocumentUploadScreen(
     ) { isGranted: Boolean ->
         if (isGranted) {
             takePictureLauncher.launch(null)
+        }
+    }
+
+    // 갤러리 실행 런처
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                isLoading = true
+                try {
+                    var nextPage = uploadedDocuments.size + 1
+                    uris.forEach { uri ->
+                        val imageUrl = firebaseStorageUtil.uploadScannedImageFromUri(
+                            uri = uri,
+                            context = context,
+                            documentType = documentType,
+                            userId = "test_user",
+                            contractId = contractId,
+                            pageNumber = nextPage
+                        )
+
+                        firestoreUtil.addDocumentToContract(
+                            userId = "test_user",
+                            contractId = contractId,
+                            documentType = documentType,
+                            imageUrl = imageUrl,
+                            pageNumber = nextPage
+                        )
+                        nextPage++
+                    }
+
+                    // 업데이트된 계약서 정보 로드
+                    val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                    updatedContract?.let { onContractUpdated(it) }
+                } catch (e: Exception) {
+                    errorMessage = "업로드 실패: ${e.message}"
+                } finally {
+                    isLoading = false
+                }
+            }
         }
     }
 
@@ -419,68 +475,109 @@ fun DocumentUploadScreen(
         if (uploadedDocuments.isNotEmpty()) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
-                state = gridState
+                state = gridState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(uploadedDocuments) { document ->
-                    DocumentPreviewItem(
-                        document = document,
-                        onDelete = {
-                            coroutineScope.launch {
-                                try {
-                                    documentUploadManager.removeDocument(
-                                        type = documentType,
-                                        pageNumber = document.pageNumber
+                items(
+                    items = uploadedDocuments,
+                    key = { it.id }
+                ) { document ->
+                    val isDragging = draggingItem?.id == document.id
+                    val isDropTarget = dropTarget?.id == document.id
+
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                if (isDragging) {
+                                    IntOffset(
+                                        dragOffset.x.roundToInt(),
+                                        dragOffset.y.roundToInt()
                                     )
-                                } catch (e: Exception) {
-                                    errorMessage = "문서 삭제 실패: ${e.message}"
+                                } else {
+                                    IntOffset.Zero
                                 }
                             }
-                        },
-                        onDragStart = { draggingItem = document },
-                        onDragEnd = {
-                            dropTarget?.let { target ->
-                                val fromIndex = document.pageNumber - 1
-                                val toIndex = target.pageNumber - 1
-                                if (fromIndex != toIndex) {
-                                    coroutineScope.launch {
-                                        try {
-                                            documentUploadManager.reorderDocuments(
-                                                type = documentType,
-                                                fromIndex = fromIndex,
-                                                toIndex = toIndex,
-                                                firebaseStorageUtil = firebaseStorageUtil
-                                            )
-                                        } catch (e: Exception) {
-                                            errorMessage = "문서 순서 변경 실패: ${e.message}"
+                    ) {
+                        var deletingDocumentId by remember { mutableStateOf<String?>(null) }
+
+                        DocumentPreviewItem(
+                            document = document,
+                            isDeleting = deletingDocumentId == document.id,  // 로딩 상태 전달
+                            onDelete = {
+                                coroutineScope.launch {
+                                    try {
+                                        deletingDocumentId = document.id  // 현재 문서 삭제 중 표시
+                                        firestoreUtil.removeDocumentFromContract(
+                                            userId = "test_user",
+                                            contractId = contractId,
+                                            documentType = documentType,
+                                            pageNumber = document.pageNumber,
+                                            firebaseStorageUtil = firebaseStorageUtil
+                                        )
+                                        // 업데이트된 계약서 정보 로드
+                                        val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                                        updatedContract?.let { onContractUpdated(it) }
+                                    } catch (e: Exception) {
+                                        errorMessage = "문서 삭제 실패: ${e.message}"
+                                    } finally {
+                                        deletingDocumentId = null  // 로딩 상태 해제
+                                    }
+                                }
+                            },
+                            onDragStart = { draggingItem = document },
+                            onDragEnd = {
+                                dropTarget?.let { target ->
+                                    val fromIndex = uploadedDocuments.indexOfFirst { it.id == draggingItem?.id }
+                                    val toIndex = uploadedDocuments.indexOfFirst { it.id == target.id }
+                                    if (fromIndex != -1 && toIndex != -1 && fromIndex != toIndex) {
+                                        coroutineScope.launch {
+                                            try {
+                                                firestoreUtil.reorderDocumentInContract(
+                                                    "test_user",
+                                                    contractId,
+                                                    documentType,
+                                                    fromIndex + 1,
+                                                    toIndex + 1
+                                                )
+                                                // 업데이트된 계약서 정보 로드
+                                                val updatedContract = firestoreUtil.getContract("test_user", contractId)
+                                                updatedContract?.let { onContractUpdated(it) }
+                                            } catch (e: Exception) {
+                                                errorMessage = "문서 순서 변경 실패: ${e.message}"
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            draggingItem = null
-                            dropTarget = null
-                            dragOffset = Offset.Zero
-                        },
-                        onDragCancel = {
-                            draggingItem = null
-                            dropTarget = null
-                            dragOffset = Offset.Zero
-                        },
-                        onPositionChanged = { x, y ->
-                            dragOffset = Offset(x, y)
-                            val hitDocument = uploadedDocuments.firstOrNull { item ->
-                                val position = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
-                                    it.key == item.id
+                                draggingItem = null
+                                dropTarget = null
+                                dragOffset = Offset.Zero
+                            },
+                            onDragCancel = {
+                                draggingItem = null
+                                dropTarget = null
+                                dragOffset = Offset.Zero
+                            },
+                            onPositionChanged = { x, y ->
+                                dragOffset = Offset(x, y)
+                                val hitDocument = uploadedDocuments.firstOrNull { item ->
+                                    val position = gridState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                        it.key == item.id
+                                    }
+                                    position != null && x >= position.offset.x &&
+                                            x <= position.offset.x + position.size.width &&
+                                            y >= position.offset.y &&
+                                            y <= position.offset.y + position.size.height
                                 }
-                                position != null && x >= position.offset.x &&
-                                        x <= position.offset.x + position.size.width &&
-                                        y >= position.offset.y &&
-                                        y <= position.offset.y + position.size.height
-                            }
-                            dropTarget = hitDocument
-                        },
-                        modifier = Modifier.zIndex(if (draggingItem?.id == document.id) 1f else 0f),
-                        isDragging = draggingItem?.id == document.id
-                    )
+                                dropTarget = hitDocument
+                            },
+                            modifier = Modifier.zIndex(if (isDragging) 1f else 0f),
+                            isDragging = isDragging
+                        )
+                    }
                 }
             }
         } else {
@@ -561,21 +658,17 @@ fun DocumentUploadScreen(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = Color(0xFF253F5A))
+            CircularProgressIndicator(
+                color = Color(0xFF253F5A)
+            )
         }
     }
 
     // 에러 메시지
     errorMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { errorMessage = null },
-            title = { Text("오류") },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
-                    Text("확인")
-                }
-            }
+        ErrorDialog(
+            message = message,
+            onDismiss = { errorMessage = null }
         )
     }
 }
@@ -583,6 +676,7 @@ fun DocumentUploadScreen(
 @Composable
 fun DocumentPreviewItem(
     document: DocumentPreview,
+    isDeleting: Boolean = false,
     onDelete: () -> Unit,
     onDragStart: () -> Unit,
     onDragEnd: () -> Unit,
@@ -635,18 +729,27 @@ fun DocumentPreviewItem(
         )
 
         // 삭제 버튼
-        IconButton(
-            onClick = onDelete,
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .size(24.dp)
         ) {
-            Icon(
-                Icons.Default.Close,
-                contentDescription = "Delete",
-                tint = Color.Black,
-                modifier = Modifier.size(16.dp)
-            )
+            if (isDeleting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFF253F5A)
+                )
+            } else {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Delete",
+                        tint = Color.Black,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -712,7 +815,7 @@ fun FullScreenImageDialog(
                             translationY = 0f
                         }
                     },
-                contentScale = ContentScale.Fit
+                contentScale = ContentScale.Fit // Fit으로 변경하여 이미지 전체가 보이도록 함
             )
 
             // 닫기 버튼
@@ -755,7 +858,7 @@ data class DocumentPreview(
 @Composable
 fun PreviewOnboardingScanScreen() {
     OnboardingScanScreen(
-        contractManager = ContractManager(),
-        firebaseStorageUtil = FirebaseStorageUtil()
+        firebaseStorageUtil = FirebaseStorageUtil(),
+        firestoreUtil = FirestoreUtil()
     )
 }

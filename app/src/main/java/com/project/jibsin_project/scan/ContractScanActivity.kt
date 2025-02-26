@@ -22,68 +22,80 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.project.jibsin_project.utils.ContractManager
 import com.project.jibsin_project.utils.FirebaseStorageUtil
+import com.project.jibsin_project.utils.FirestoreUtil
+import com.project.jibsin_project.utils.ContractStatus
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import java.util.UUID
 
 class ContractScanActivity : ComponentActivity() {
-    private val contractManager = ContractManager()
     private val firebaseStorageUtil = FirebaseStorageUtil()
+    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            ContractScanScreen(contractManager, firebaseStorageUtil)
+            ContractScanScreen(firebaseStorageUtil, firestoreUtil)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContractScanScreen(contractManager: ContractManager, firebaseStorageUtil: FirebaseStorageUtil) {
+fun ContractScanScreen(firebaseStorageUtil: FirebaseStorageUtil, firestoreUtil: FirestoreUtil) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    val userId = "test_user"
+    var currentPage by remember { mutableStateOf(1) }
 
-    // 계약 ID 생성
-    val contractId = remember {
-        runBlocking {
-            contractManager.createContract(userId)
+    // contractId를 저장할 상태 변수
+    var contractId by remember { mutableStateOf<String?>(null) }
+
+    // 컴포넌트가 처음 생성될 때 새로운 계약서 문서 생성
+    LaunchedEffect(Unit) {
+        try {
+            contractId = firestoreUtil.createNewContract("test_user")
+        } catch (e: Exception) {
+            errorMessage = "계약서 생성 실패: ${e.message}"
         }
     }
-    var currentPage by remember { mutableStateOf(1) }
+
+    val hasPermission = remember {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        if (bitmap != null) {
+        if (bitmap != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
                     val imageUrl = firebaseStorageUtil.uploadScannedImage(
                         bitmap = bitmap,
                         documentType = "contract",
-                        contractId = contractId,
+                        userId = "test_user",
+                        contractId = contractId!!,
                         pageNumber = currentPage
                     )
 
-                    contractManager.addDocument(
-                        userId = userId,
-                        contractId = contractId,
+                    // Contract 문서에 이미지 정보 추가
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
                         documentType = "contract",
                         imageUrl = imageUrl,
                         pageNumber = currentPage
                     )
+
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                         putExtra("contractId", contractId)
-                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -97,7 +109,7 @@ fun ContractScanScreen(contractManager: ContractManager, firebaseStorageUtil: Fi
     val pickImageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
+        if (uri != null && contractId != null) {
             isLoading = true
             coroutineScope.launch {
                 try {
@@ -105,23 +117,25 @@ fun ContractScanScreen(contractManager: ContractManager, firebaseStorageUtil: Fi
                         uri = uri,
                         context = context,
                         documentType = "contract",
-                        contractId = contractId,
+                        userId = "test_user",
+                        contractId = contractId!!,
                         pageNumber = currentPage
                     )
 
-                    contractManager.addDocument(
-                        userId = userId,
-                        contractId = contractId,
+                    // Contract 문서에 이미지 정보 추가
+                    firestoreUtil.addDocumentToContract(
+                        userId = "test_user",
+                        contractId = contractId!!,
                         documentType = "contract",
                         imageUrl = imageUrl,
                         pageNumber = currentPage
                     )
+
                     currentPage++
                     isLoading = false
 
                     val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
                         putExtra("contractId", contractId)
-                        putExtra("userId", userId)
                     }
                     context.startActivity(intent)
                 } catch (e: Exception) {
@@ -199,6 +213,6 @@ fun ContractScanScreen(contractManager: ContractManager, firebaseStorageUtil: Fi
 fun PreviewContractScanScreen() {
     ContractScanScreen(
         firebaseStorageUtil = FirebaseStorageUtil(),
-        contractManager = ContractManager()
+        firestoreUtil = FirestoreUtil()
     )
 }

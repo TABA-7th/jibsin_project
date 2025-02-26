@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
@@ -13,55 +14,58 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.project.jibsin_project.scan.components.DocumentAnalysisScreen
 import com.project.jibsin_project.utils.DocumentAnalyzer
 import com.project.jibsin_project.utils.ErrorDialog
+import com.project.jibsin_project.utils.FirestoreUtil
 import kotlinx.coroutines.delay
+import com.project.jibsin_project.utils.Contract
 
 class AIAnalysisResultActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val analysisId = intent.getStringExtra("analysisId") ?: return
+        val contractId = intent.getStringExtra("contractId") ?: return
 
         setContent {
-            AIAnalysisResultScreen(analysisId)
+            AIAnalysisResultScreen(contractId)
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AIAnalysisResultScreen(analysisId: String) {
+fun AIAnalysisResultScreen(contractId: String) {
     var analysisResult by remember { mutableStateOf<Map<String, Any>?>(null) }
+    var contract by remember { mutableStateOf<Contract?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val documentAnalyzer = remember { DocumentAnalyzer() }
+    val firestoreUtil = remember { FirestoreUtil() }
+    val context = LocalContext.current
 
     // 분석 결과 로딩
-    LaunchedEffect(analysisId) {
+    LaunchedEffect(contractId) {
         try {
             isLoading = true
-            delay(1000) // 백엔드 분석 시간 대기
 
-            // 임시 데이터
-            analysisResult = mapOf(
-                "buildingName" to "예시아파트",
-                "address" to "서울시 강남구 테헤란로 123",
-                "area" to "85.12㎡",
-                "registryType" to "집합건물",
-                "lessorMatch" to true,
-                "lesseeMatch" to true,
-                "addressMatch" to true,
-                "rentAmount" to "1,000,000원",
-                "contractPeriod" to "2024.03.01 ~ 2025.02.28",
-                "deposit" to "10,000,000원"
-            )
+            // 분석 결과가 나올 때까지 주기적으로 확인
+            while (true) {
+                val currentContract = firestoreUtil.getContract("test_user", contractId)
+                if (currentContract?.analysisStatus == "completed") {  // analysisStatus로 체크
+                    contract = currentContract           // Contract 저장
+                    analysisResult = currentContract.analysisResult
+                    break
+                }
+                delay(2000) // 2초마다 확인
+            }
+
             isLoading = false
         } catch (e: Exception) {
-            errorMessage = "분석 결과를 불러오는 중 오류가 발생했습니다."
+            errorMessage = "분석 결과를 불러오는 중 오류가 발생했습니다: ${e.message}"
             isLoading = false
         }
     }
@@ -73,7 +77,20 @@ fun AIAnalysisResultScreen(analysisId: String) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFFF9F9F9),
                     titleContentColor = Color(0xFF253F5A)
-                )
+                ),
+                navigationIcon = {
+                    // 뒤로가기 버튼 추가
+                    IconButton(onClick = {
+                        // Activity 종료
+                        (context as? ComponentActivity)?.finish()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = Color(0xFF253F5A)
+                        )
+                    }
+                }
             )
         }
     ) { padding ->
@@ -95,8 +112,21 @@ fun AIAnalysisResultScreen(analysisId: String) {
                         .fillMaxSize()
                         .padding(16.dp)
                 ) {
+                    // 문서 미리보기와 알림 표시
+                    item {
+                        analysisResult?.let { result ->
+                            contract?.let { currentContract ->  // null 체크
+                                DocumentAnalysisScreen(
+                                    analysisResult = result,
+                                    contract = currentContract
+                                )
+                            }
+                        }
+                    }
+
                     // 문서 정보 섹션
                     item {
+                        Spacer(modifier = Modifier.height(24.dp))
                         Text(
                             text = "문서 정보",
                             style = MaterialTheme.typography.titleLarge,
@@ -179,18 +209,9 @@ fun ValidationResultSection(result: Map<String, Any>?) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            ValidationItem(
-                "임대인 정보 일치",
-                result?.get("lessorMatch") as? Boolean ?: false
-            )
-            ValidationItem(
-                "임차인 정보 일치",
-                result?.get("lesseeMatch") as? Boolean ?: false
-            )
-            ValidationItem(
-                "주소 정보 일치",
-                result?.get("addressMatch") as? Boolean ?: false
-            )
+            ValidationItem("임대인 정보 일치", result?.get("lessorMatch") as? Boolean ?: false)
+            ValidationItem("임차인 정보 일치", result?.get("lesseeMatch") as? Boolean ?: false)
+            ValidationItem("주소 정보 일치", result?.get("addressMatch") as? Boolean ?: false)
         }
     }
 }
@@ -262,5 +283,5 @@ fun ValidationItem(label: String, isValid: Boolean) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewAIAnalysisResultScreen() {
-    AIAnalysisResultScreen(analysisId = "preview_analysis_id")
+    AIAnalysisResultScreen(contractId = "preview_contract_id")
 }

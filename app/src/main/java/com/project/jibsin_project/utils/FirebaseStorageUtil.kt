@@ -8,6 +8,7 @@ import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 
 class FirebaseStorageUtil {
     private val storage = Firebase.storage
@@ -21,39 +22,17 @@ class FirebaseStorageUtil {
     suspend fun uploadScannedImage(
         bitmap: Bitmap,
         documentType: String,
+        userId: String,
         contractId: String,
         pageNumber: Int
     ): String {
-        // 문서 스캔 처리
         val scannedBitmap = documentScanner.scanDocument(bitmap, documentType)
-        return uploadImage(scannedBitmap, documentType, contractId, pageNumber)
-    }
+        val croppedBitmap = cropBitmapEdges(scannedBitmap)
 
-    suspend fun uploadScannedImageFromUri(
-        uri: Uri,
-        context: Context,
-        documentType: String,
-        contractId: String,
-        pageNumber: Int
-    ): String {
-        val bitmap = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it)
-        } ?: throw IllegalStateException("Failed to read image file")
-
-        return uploadScannedImage(bitmap, documentType, contractId, pageNumber)
-    }
-
-    private suspend fun uploadImage(
-        bitmap: Bitmap,
-        documentType: String,
-        contractId: String,
-        pageNumber: Int
-    ): String {
         val baos = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
+        croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos)
         val data = baos.toByteArray()
 
-        // 파일 경로 구조: scanned_documents/{contractId}/{documentType}_page{number}.jpg
         val fileName = "${documentType}_page${pageNumber}.jpg"
         val imageRef = storageRef.child("$contractId/$fileName")
 
@@ -62,6 +41,46 @@ class FirebaseStorageUtil {
             imageRef.downloadUrl.await().toString()
         } catch (e: Exception) {
             throw e
+        }
+    }
+
+    suspend fun uploadScannedImageFromUri(
+        uri: Uri,
+        context: Context,
+        documentType: String,
+        userId: String,
+        contractId: String,
+        pageNumber: Int
+    ): String {
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it)
+        } ?: throw IllegalStateException("Failed to read image file")
+
+        return uploadScannedImage(bitmap, documentType, userId, contractId, pageNumber)
+    }
+
+    private fun cropBitmapEdges(bitmap: Bitmap): Bitmap {
+        val cropMargin = 0
+        return Bitmap.createBitmap(
+            bitmap,
+            cropMargin,
+            cropMargin,
+            bitmap.width - (2 * cropMargin),
+            bitmap.height - (2 * cropMargin)
+        )
+    }
+
+    suspend fun deleteDocument(contractId: String, documentType: String, pageNumber: Int) {
+        val ref = storageRef.child("$contractId/${documentType}_page${pageNumber}.jpg")
+        try {
+            try {
+                ref.metadata.await()
+            } catch (e: Exception) {
+                return
+            }
+            ref.delete().await()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -84,16 +103,12 @@ class FirebaseStorageUtil {
         }
     }
 
-    suspend fun deleteDocument(
-        contractId: String,
-        documentType: String,
-        pageNumber: Int
-    ) {
-        val ref = storageRef.child("$contractId/${documentType}_page${pageNumber}.jpg")
-        try {
-            ref.delete().await()
+    suspend fun getDownloadUrl(contractId: String, documentType: String, pageNumber: Int): String? {
+        return try {
+            val ref = storageRef.child("$contractId/${documentType}_page${pageNumber}.jpg")
+            ref.downloadUrl.await().toString()
         } catch (e: Exception) {
-            e.printStackTrace()
+            null
         }
     }
 }

@@ -11,14 +11,12 @@ import com.google.firebase.FirebaseApp
 import com.project.jibsin_project.Home.HomeScreen
 import com.project.jibsin_project.login.LoginScreen
 import com.project.jibsin_project.login.SignUpScreen
-import com.project.jibsin_project.utils.ContractManager
-import com.project.jibsin_project.utils.DocumentUploadManager
 import com.project.jibsin_project.utils.FirebaseStorageUtil
+import com.project.jibsin_project.utils.FirestoreUtil
 
 class MainActivity : ComponentActivity() {
-    private val documentUploadManager = DocumentUploadManager.getInstance()
     private val firebaseStorageUtil = FirebaseStorageUtil()
-    private val contractManager = ContractManager()
+    private val firestoreUtil = FirestoreUtil()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,15 +25,13 @@ class MainActivity : ComponentActivity() {
         FirebaseApp.initializeApp(this)
 
         setContent {
-            MyApp() // MyApp에서 상태바 색상과 UI를 설정
+            MyApp()
         }
     }
 }
 
 @Composable
 fun MyApp() {
-    val documentUploadManager = remember { DocumentUploadManager.getInstance() }
-
     // 상태바 설정
     val systemUiController = rememberSystemUiController()
     systemUiController.setSystemBarsColor(
@@ -44,11 +40,11 @@ fun MyApp() {
     )
 
     // 네비게이션 및 UI 구성
-    AppNavigation(documentUploadManager)
+    AppNavigation()
 }
 
 @Composable
-fun AppNavigation(documentUploadManager: DocumentUploadManager) {
+fun AppNavigation() {
     var isSignUpScreen by remember { mutableStateOf(false) }
     var isLoggedIn by remember { mutableStateOf(false) }
 
@@ -70,5 +66,5 @@ fun AppNavigation(documentUploadManager: DocumentUploadManager) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewAppNavigation() {
-    AppNavigation(DocumentUploadManager.getInstance())
+    AppNavigation()
 }
