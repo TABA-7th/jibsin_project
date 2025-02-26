@@ -628,4 +628,103 @@ class FirestoreUtil {
             emptyList()
         }
     }
+
+    // 등기부등본의 발급일자/열람일시 데이터 가져오기
+    suspend fun getRegistryDocumentDates(userId: String, contractId: String): List<DateInfo> {
+        val dates = mutableListOf<DateInfo>()
+
+        try {
+            // AI 분석 결과 조회
+            val analysisPath = "users/$userId/contracts/$contractId/AI_analysis"
+            val analysisDocs = db.collection(analysisPath).get().await()
+
+            for (doc in analysisDocs.documents) {
+                val data = doc.data ?: continue
+                val result = data["result"] as? Map<String, Any> ?: continue
+
+                val registryDocument = result["registry_document"] as? Map<String, Any> ?: continue
+
+                // 모든 페이지 순회
+                for ((pageKey, pageValue) in registryDocument) {
+                    if (!pageKey.toString().startsWith("page")) continue
+
+                    val page = pageValue as? Map<String, Any> ?: continue
+
+                    // 발급일자 또는 열람일시 찾기
+                    for ((key, value) in page) {
+                        if (key == "발급일자" || key == "열람일시" || key.toString().contains("발급") || key.toString().contains("열람")) {
+                            val field = value as? Map<String, Any> ?: continue
+                            val text = field["text"] as? String ?: continue
+                            val boundingBox = extractBoundingBox(field["bounding_box"] as? Map<String, Any>)
+
+                            dates.add(DateInfo(key.toString(), text, boundingBox))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println("등기부등본 발급일자 조회 오류: ${e.message}")
+        }
+
+        return dates
+    }
+
+    // 건축물대장의 발급일자 데이터 가져오기
+    suspend fun getBuildingRegistryDates(userId: String, contractId: String): List<DateInfo> {
+        val dates = mutableListOf<DateInfo>()
+
+        try {
+            // AI 분석 결과 조회
+            val analysisPath = "users/$userId/contracts/$contractId/AI_analysis"
+            val analysisDocs = db.collection(analysisPath).get().await()
+
+            for (doc in analysisDocs.documents) {
+                val data = doc.data ?: continue
+                val result = data["result"] as? Map<String, Any> ?: continue
+
+                val buildingRegistry = result["building_registry"] as? Map<String, Any> ?: continue
+
+                // 모든 페이지 순회
+                for ((pageKey, pageValue) in buildingRegistry) {
+                    if (!pageKey.toString().startsWith("page")) continue
+
+                    val page = pageValue as? Map<String, Any> ?: continue
+
+                    // 발급일자 찾기
+                    for ((key, value) in page) {
+                        if (key == "발급일자" || key.toString().contains("발급")) {
+                            val field = value as? Map<String, Any> ?: continue
+                            val text = field["text"] as? String ?: continue
+                            val boundingBox = extractBoundingBox(field["bounding_box"] as? Map<String, Any>)
+
+                            dates.add(DateInfo(key.toString(), text, boundingBox))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println("건축물대장 발급일자 조회 오류: ${e.message}")
+        }
+
+        return dates
+    }
+
+    // BoundingBox 추출 헬퍼 함수
+    private fun extractBoundingBox(boxMap: Map<String, Any>?): BoundingBox {
+        if (boxMap == null) return BoundingBox(0, 0, 0, 0)
+
+        return BoundingBox(
+            x1 = (boxMap["x1"] as? Number)?.toInt() ?: 0,
+            y1 = (boxMap["y1"] as? Number)?.toInt() ?: 0,
+            x2 = (boxMap["x2"] as? Number)?.toInt() ?: 0,
+            y2 = (boxMap["y2"] as? Number)?.toInt() ?: 0
+        )
+    }
+
+    // 발급일자 정보를 담는 데이터 클래스
+    data class DateInfo(
+        val key: String,
+        val text: String,
+        val boundingBox: BoundingBox
+    )
 }

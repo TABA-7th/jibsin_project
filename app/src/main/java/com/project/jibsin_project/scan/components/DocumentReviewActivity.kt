@@ -95,23 +95,27 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
             imageWidth = dimensions.first
             imageHeight = dimensions.second
 
-            println("로드된 바운딩 박스 수: ${boundingBoxes.size}")
-
             // 2. 알림 데이터 직접 가져오기
-            notices = firestoreUtil.getAIAnalysisNotices(
+            val noticesList = firestoreUtil.getAIAnalysisNotices(
                 userId = "test_user",
                 contractId = contractId,
                 documentType = currentDocumentType,
                 pageNumber = currentPageIndex + 1
-            )
+            ).toMutableList()
 
-            println("가져온 알림 수: ${notices.size}")
-            if (notices.isNotEmpty()) {
-                notices.forEach { notice ->
-                    println("  - notice: ${notice.notice}")
-                    println("  - boundingBox: (${notice.boundingBox.x1}, ${notice.boundingBox.y1}, ${notice.boundingBox.x2}, ${notice.boundingBox.y2})")
-                }
+            // 3. 발급일자 체크 및 알림 추가 (등기부등본과 건축물대장에만 적용)
+            if (currentDocumentType == "registry_document" || currentDocumentType == "building_registry") {
+                // suspend 함수 호출
+                checkAndCreateDateAlert(
+                    notices = noticesList,
+                    documentType = currentDocumentType,
+                    firestoreUtil = firestoreUtil,
+                    contractId = contractId
+                )
             }
+
+            // 4. 최종 알림 목록 설정
+            notices = noticesList
 
         } catch (e: Exception) {
             println("문서 데이터 로드 중 오류: ${e.message}")
@@ -405,41 +409,43 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
     }
 }
 
-// 스크롤바 UI 개선 - 수정된 부분
+// 스크롤바 UI
 @Composable
 fun CustomScrollbar(
     scrollState: androidx.compose.foundation.ScrollState,
     height: Dp,
     modifier: Modifier = Modifier
 ) {
-    if (scrollState.maxValue > 0) {
-        val scrollRatio = scrollState.value.toFloat() / scrollState.maxValue.toFloat()
-        val trackHeight = height - 16.dp  // 패딩 고려
-
-        // 수정된 부분: Dp 타입을 명확하게 처리
-        val ratio = minOf(1f, height.value / scrollState.maxValue.toFloat())
-        val handleHeight = maxOf(40.dp, trackHeight * ratio)
-        val offsetY = (trackHeight - handleHeight) * scrollRatio
-
+    Box(
+        modifier = modifier
+            .width(4.dp)
+            .height(height)
+            .padding(vertical = 8.dp)
+    ) {
+        // 스크롤바 트랙
         Box(
-            modifier = modifier
-                .height(height)
-                .width(4.dp)
-                .padding(vertical = 8.dp)
-        ) {
-            // 스크롤바 트랙
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
-            )
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+        )
 
-            // 스크롤바 핸들
+        // 스크롤바 핸들 (최소 높이 설정)
+        if (scrollState.maxValue > 0) {
+            val scrollRatio = scrollState.value.toFloat() / scrollState.maxValue
+
+            // 컨텐츠 길이에 따른 핸들 높이 계산 (최소값 40dp 보장)
+            val contentRatio = minOf(1f, height.value / (height.value + scrollState.maxValue))
+            val handleHeight = maxOf(40.dp, (height.value * contentRatio).dp)
+
+            // 스크롤 위치에 따른 오프셋 계산
+            val availableSpace = height - handleHeight - 16.dp // 패딩 고려
+            val yOffset = (scrollRatio * availableSpace.value).dp + 8.dp // 상단 패딩 추가
+
             Box(
                 modifier = Modifier
                     .width(4.dp)
                     .height(handleHeight)
-                    .offset(y = offsetY)
+                    .offset(y = yOffset)
                     .background(Color.Gray.copy(alpha = 0.6f), RoundedCornerShape(2.dp))
             )
         }
@@ -455,6 +461,130 @@ fun formatSpecialTermText(text: String, key: String = ""): String {
         return "$firstPart...(이하생략)"
     }
     return text
+}
+
+// 날짜 확인 및 발급일자 관련 알림 생성 함수
+suspend fun checkAndCreateDateAlert(
+    notices: MutableList<Notice>,
+    documentType: String,
+    firestoreUtil: FirestoreUtil,
+    contractId: String,
+    userId: String = "test_user"
+) {
+    try {
+        // Firestore에서 발급일자 데이터 가져오기
+        when (documentType) {
+            "registry_document" -> {
+                // 등기부등본의 경우 "열람일시" 또는 "발급일자" 키를 확인
+                val dates = firestoreUtil.getRegistryDocumentDates(userId, contractId)
+                if (dates.isNotEmpty()) {
+                    // 발급일자 Notice 생성
+                    for (dateInfo in dates) {
+                        val text = dateInfo.text
+                        val key = dateInfo.key
+                        val boundingBox = dateInfo.boundingBox
+
+                        // 오늘 날짜와 비교 - 전역 함수로 접근
+                        if (!isDateEqualToToday(text)) {
+                            val notice = Notice(
+                                documentType = "registry_document",
+                                boundingBox = boundingBox,
+                                notice = "오늘 발급받은 등기부등본이 아닙니다.",
+                                text = text,
+                                solution = "최신 등기부등본을 확인해야 합니다.",
+                                key = key
+                            )
+                            notices.add(notice)
+                        }
+                    }
+                }
+            }
+            "building_registry" -> {
+                // 건축물대장의 경우 "발급일자" 키를 확인
+                val dates = firestoreUtil.getBuildingRegistryDates(userId, contractId)
+                if (dates.isNotEmpty()) {
+                    // 발급일자 Notice 생성
+                    for (dateInfo in dates) {
+                        val text = dateInfo.text
+                        val boundingBox = dateInfo.boundingBox
+
+                        // 오늘 날짜와 비교 - 전역 함수로 접근
+                        if (!isDateEqualToToday(text)) {
+                            val notice = Notice(
+                                documentType = "building_registry",
+                                boundingBox = boundingBox,
+                                notice = "오늘 발급받은 건축물대장이 아닙니다.",
+                                text = text,
+                                solution = "최신 건축물발급대장을 확인해야 합니다.",
+                                key = "발급일자"
+                            )
+                            notices.add(notice)
+                        }
+                    }
+                }
+            }
+            else -> {
+                // 다른 문서 타입은 처리하지 않음
+            }
+        }
+    } catch (e: Exception) {
+        println("발급일자 확인 중 오류: ${e.message}")
+    }
+}
+
+// 날짜가 오늘과 동일한지 확인하는 전역 함수
+fun isDateEqualToToday(dateText: String): Boolean {
+    try {
+        // 현재 날짜 계산
+        val currentDate = Calendar.getInstance().time
+        val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val currentDateString = dateFormatter.format(currentDate)
+
+        // 다양한 날짜 포맷 처리
+        val formats = listOf(
+            "yyyy-MM-dd",
+            "yyyy년 MM월 dd일",
+            "yyyy년 MM월 d일",
+            "yyyy년 M월 d일",
+            "yyyy년 M월 dd일",
+            "yyyy.MM.dd"
+        )
+
+        for (format in formats) {
+            try {
+                val parser = SimpleDateFormat(format, Locale.getDefault())
+                val date = parser.parse(dateText.trim())
+                val dateStr = dateFormatter.format(date)
+                return dateStr == currentDateString
+            } catch (e: Exception) {
+                // 파싱 실패시 다음 포맷 시도
+                continue
+            }
+        }
+
+        // 날짜에 "년", "월", "일"이 포함된 경우 직접 파싱 시도
+        if (dateText.contains("년") && dateText.contains("월") && dateText.contains("일")) {
+            val year = dateText.substringBefore("년").trim()
+                .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+            val month = dateText.substringAfter("년").substringBefore("월").trim()
+                .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+            val day = dateText.substringAfter("월").substringBefore("일").trim()
+                .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+            val cal = Calendar.getInstance()
+            cal.time = currentDate
+
+            return year == cal.get(Calendar.YEAR) &&
+                    month == cal.get(Calendar.MONTH) + 1 &&
+                    day == cal.get(Calendar.DAY_OF_MONTH)
+        }
+
+        return false
+    } catch (e: Exception) {
+        return false
+    }
 }
 
 @Composable
@@ -479,7 +609,7 @@ fun BoundingBoxOverlay(
     val horizontalPadding = 16.dp
     val verticalPadding = 16.dp
     val tooltipHeight = 280.dp
-    val iconSize = 16.dp
+    val iconSize = 20.dp
 
     // dp to pixels 변환 준비
     val cardWidthPx = with(density) { cardWidth.toPx() }
@@ -491,6 +621,11 @@ fun BoundingBoxOverlay(
     // 날짜 형식 확인 및 비교 함수
     fun isDateEqual(dateText: String): Boolean {
         try {
+            // 현재 날짜 계산
+            val currentDate = Calendar.getInstance().time
+            val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val currentDateString = dateFormatter.format(currentDate)
+
             // 다양한 날짜 포맷 처리
             val formats = listOf(
                 "yyyy-MM-dd",
@@ -538,7 +673,7 @@ fun BoundingBoxOverlay(
         }
     }
 
-    // 위험 수준 결정 함수
+    // 위험 수준 결정 함수 수정
     fun determineRiskLevel(notice: Notice): RiskLevel {
         // 바운딩 박스가 (0,0,0,0)인 경우 표시 안함
         if (notice.boundingBox.x1 == 0 && notice.boundingBox.y1 == 0 &&
@@ -551,13 +686,32 @@ fun BoundingBoxOverlay(
             return RiskLevel.NONE
         }
 
-        // 기본은 경고(주황색)로 시작
-        var riskLevel = RiskLevel.WARNING
+        // 발급일자 관련 키워드가 포함된 경우 - 날짜가 다르면 항상 위험 표시
+        if ((notice.key == "발급일자" || notice.key == "열람일시" ||
+                    notice.key.contains("발급") || notice.key.contains("열람")) &&
+            (notice.documentType == "registry_document" || notice.documentType == "building_registry")) {
 
-        // 문제 없음인 경우 표시 안함
+            // 노티스 내용이 지정된 경우 (위에서 추가한 발급일자 알림)
+            if (notice.notice.contains("오늘 발급받은") ||
+                notice.notice.contains("최신") ||
+                notice.solution.contains("최신")) {
+                return RiskLevel.DANGER
+            }
+
+            // 날짜 텍스트만 있는 경우 직접 비교
+            val isCurrentDate = isDateEqualToToday(notice.text)
+            if (!isCurrentDate) {
+                return RiskLevel.DANGER
+            }
+        }
+
+        // 문제 없음인 경우 표시 안함 (발급일자 제외)
         if (notice.notice == "문제 없음") {
             return RiskLevel.NONE
         }
+
+        // 기본은 경고(주황색)로 시작
+        var riskLevel = RiskLevel.WARNING
 
         // 계약서의 보증금_1 키에 대한 위험 처리
         if (notice.documentType == "contract" && notice.key == "보증금_1" && notice.notice != "문제 없음") {
@@ -580,15 +734,6 @@ fun BoundingBoxOverlay(
                 if (notice.key.contains(keyword)) {
                     return RiskLevel.DANGER
                 }
-            }
-        }
-
-        // 발급일자 확인
-        if ((notice.documentType == "registry_document" && notice.key == "발급일자") ||
-            (notice.documentType == "building_registry" && notice.key == "발급일자")) {
-            val noticeDate = notice.text.trim()
-            if (!isDateEqual(noticeDate)) {
-                return RiskLevel.DANGER
             }
         }
 
@@ -660,7 +805,7 @@ fun BoundingBoxOverlay(
                             x = with(density) { (boxX - iconSizePx/2).toDp() },
                             y = with(density) { (boxY - iconSizePx/2).toDp() }
                         )
-                        .zIndex(3f) // 경고 아이콘에 더 높은 z-index 부여
+                        .zIndex(3f) // 경고 아이콘에 더 높은 z-index
                 ) {
                     // 경고 아이콘
                     IconButton(
@@ -676,7 +821,7 @@ fun BoundingBoxOverlay(
                             Icons.Default.Warning,
                             contentDescription = "경고",
                             tint = Color.White,
-                            modifier = Modifier.size(14.dp) // 아이콘 내부 크기 조정
+                            modifier = Modifier.size(16.dp) // 아이콘 내부 크기 조정
                         )
                     }
                 }
