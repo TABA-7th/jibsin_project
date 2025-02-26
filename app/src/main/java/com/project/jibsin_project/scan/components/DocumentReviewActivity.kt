@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,11 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +49,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 
 class DocumentReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,6 +110,34 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
     val docTypeTabItems = listOf("건축물대장", "등기부등본", "계약서")
     val docTypeKeys = listOf("building_registry", "registry_document", "contract")
     var showNotices by remember { mutableStateOf(true) } // 알림 표시 여부 상태
+
+    // 확대/축소 관련 상태
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var zoomMode by remember { mutableStateOf(false) } // 줌 모드 활성화 여부
+
+    // 변환 가능한 상태 정의
+    val transformableState = rememberTransformableState { zoomChange, offsetChange, _ ->
+        if (zoomMode) {
+            scale = (scale * zoomChange).coerceIn(1f, 3f) // 확대 범위 제한
+            offset += offsetChange
+
+            // 이미지가 화면 밖으로 나가는 것을 방지하는 로직
+            // 확대된 이미지의 최대 오프셋 계산
+            val maxX = ((scale - 1) * imageWidthPx) / 2f
+            val maxY = ((scale - 1) * imageHeightPx) / 2f
+
+            // 오프셋 제한
+            if (maxX > 0) {
+                offset = Offset(
+                    x = offset.x.coerceIn(-maxX, maxX),
+                    y = offset.y.coerceIn(-maxY, maxY)
+                )
+            } else {
+                offset = Offset.Zero
+            }
+        }
+    }
 
     // 계약 데이터 로드
     LaunchedEffect(contractId) {
@@ -176,6 +212,11 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                     }
                 }
             }
+
+            // 줌 모드를 끄고 이미지 상태 초기화
+            zoomMode = false
+            scale = 1f
+            offset = Offset.Zero
 
         } catch (e: Exception) {
             println("문서 데이터 로드 중 오류: ${e.message}")
@@ -281,30 +322,72 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
             } else if (currentImageUrl != null) {
                 // 이미지와 바운딩 박스
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // 1. 이미지
-                    AsyncImage(
-                        model = currentImageUrl,
-                        contentDescription = "문서 이미지",
+                    // 1. 이미지 (확대/축소/이동 가능)
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .zIndex(1f)
-                            .onGloballyPositioned { coordinates ->
-                                imageWidthPx = coordinates.size.width
-                                imageHeightPx = coordinates.size.height
-                            },
-                        contentScale = ContentScale.FillWidth
-                    )
+                            // transformable로 확대/축소/이동 지원
+                            .graphicsLayer(
+                                scaleX = if (zoomMode) scale else 1f,
+                                scaleY = if (zoomMode) scale else 1f,
+                                translationX = if (zoomMode) offset.x else 0f,
+                                translationY = if (zoomMode) offset.y else 0f
+                            )
+                            .transformable(state = transformableState)
+                            // 추가적으로 핀치 제스처 감지 (더블 탭 등의 추가 제스처를 위한 준비)
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    if (zoomMode) {
+                                        scale = (scale * zoom).coerceIn(1f, 3f)
 
-                    // 2. 바운딩 박스와 알림 아이콘 오버레이 (알림 표시 여부에 따라 조건부 표시)
-                    if (boundingBoxes.isNotEmpty() && imageWidth > 0 && imageHeight > 0 && imageWidthPx > 0) {
-                        BoundingBoxOverlay(
-                            boundingBoxes = boundingBoxes,
-                            originalWidth = imageWidth,
-                            originalHeight = imageHeight,
-                            displayWidth = imageWidthPx.toFloat(),
-                            displayHeight = imageHeightPx.toFloat(),
-                            notices = if (showNotices) notices else emptyList()  // 알림 표시 여부에 따라 전달
+                                        // 이미지가 화면 밖으로 나가는 것을 방지
+                                        val maxX = ((scale - 1) * imageWidthPx) / 2f
+                                        val maxY = ((scale - 1) * imageHeightPx) / 2f
+
+                                        offset = Offset(
+                                            x = (offset.x + pan.x).coerceIn(-maxX, maxX),
+                                            y = (offset.y + pan.y).coerceIn(-maxY, maxY)
+                                        )
+                                    }
+                                }
+                            }
+                    ) {
+                        AsyncImage(
+                            model = currentImageUrl,
+                            contentDescription = "문서 이미지",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    imageWidthPx = coordinates.size.width
+                                    imageHeightPx = coordinates.size.height
+                                },
+                            contentScale = ContentScale.FillWidth
                         )
+                    }
+
+                    // 2. 바운딩 박스와 알림 아이콘 오버레이 (확대/축소에 맞게 조정)
+                    if (boundingBoxes.isNotEmpty() && imageWidth > 0 && imageHeight > 0 && imageWidthPx > 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .zIndex(2f)
+                                .graphicsLayer(
+                                    scaleX = if (zoomMode) scale else 1f,
+                                    scaleY = if (zoomMode) scale else 1f,
+                                    translationX = if (zoomMode) offset.x else 0f,
+                                    translationY = if (zoomMode) offset.y else 0f
+                                )
+                        ) {
+                            BoundingBoxOverlay(
+                                boundingBoxes = boundingBoxes,
+                                originalWidth = imageWidth,
+                                originalHeight = imageHeight,
+                                displayWidth = imageWidthPx.toFloat(),
+                                displayHeight = imageHeightPx.toFloat(),
+                                notices = if (showNotices) notices else emptyList()
+                            )
+                        }
                     }
                 }
 
@@ -314,39 +397,7 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                 ) {
-                    // 알림 정보 표시 (알림이 있고 표시 설정이 켜져 있는 경우만)
-                    if (notices.isNotEmpty() && showNotices) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color.Black.copy(alpha = 0.7f))
-                                .padding(8.dp)
-                        ) {
-                            Column {
-                                Text(
-                                    text = "경고 (${notices.size}개)",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                notices.take(2).forEachIndexed { index, notice ->
-                                    Text(
-                                        text = "[$index] '${notice.notice.take(30)}...'",
-                                        color = Color.White,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                                if (notices.size > 2) {
-                                    Text(
-                                        text = "그 외 ${notices.size - 2}개...",
-                                        color = Color.White,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // 알림 토글 버튼 행
+                    // 확대/축소 및 알림 토글 버튼 행
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -355,6 +406,40 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 확대/축소 토글 버튼
+                        OutlinedButton(
+                            onClick = {
+                                zoomMode = !zoomMode
+                                if (!zoomMode) {
+                                    // 줌 모드를 끄면 이미지 상태 초기화
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (zoomMode) Color(0xFF3F51B5) else Color.Gray
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (zoomMode) Color(0xFF3F51B5) else Color.Gray
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (zoomMode)
+                                        Icons.Default.ZoomOut
+                                    else
+                                        Icons.Default.ZoomIn,
+                                    contentDescription = if (zoomMode) "확대 중" else "확대하기",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (zoomMode) "축소하기" else "확대하기")
+                            }
+                        }
+
                         // 알림 활성화/비활성화 토글 버튼
                         OutlinedButton(
                             onClick = { showNotices = !showNotices },
@@ -380,6 +465,23 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(if (showNotices) "알림 켜짐" else "알림 꺼짐")
                             }
+                        }
+                    }
+
+                    // 확대/축소 모드일 때 표시되는 안내 메시지
+                    if (zoomMode) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFEDE7F6))
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "핀치로 확대/축소, 드래그로 이동 (${String.format("%.1f", scale)}x)",
+                                color = Color(0xFF3F51B5),
+                                fontSize = 14.sp
+                            )
                         }
                     }
 
@@ -464,6 +566,25 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                     modifier = Modifier.align(Alignment.Center),
                     style = MaterialTheme.typography.titleLarge
                 )
+            }
+
+            // 확대/축소 시 페이지 전환 안내 메시지
+            if (zoomMode && (scale > 1.0f || offset != Offset.Zero)) {
+                // 확대 중에만 표시되는 안내 메시지 (상단)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = "축소하기 버튼을 눌러 원래 크기로 돌아가세요",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             }
         }
     }
