@@ -99,7 +99,7 @@ fun OnboardingScanScreen(
     }
 
     val pages = listOf(
-        Triple("building_registry", "건축물대장", "건축물대장을 순서대로 업로드하세요."),
+        Triple("building_registry", "건축물대장", "건축물대장을 업로드하세요."),
         Triple("registry_document", "등기부등본", "등기부등본을 순서대로 업로드하세요."),
         Triple("contract", "계약서", "계약서를 순서대로 업로드하세요.")
     )

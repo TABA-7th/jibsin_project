@@ -7,11 +7,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -355,7 +358,7 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                                     context.startActivity(intent)
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF4CAF50)
+                                    containerColor = Color(0xFF253F5A)
                                 )
                             ) {
                                 Text("요약", color = Color.White)
@@ -676,11 +679,19 @@ fun BoundingBoxOverlay(
     val heightRatio = displayHeight / originalHeight
     var expandedNoticeId by remember { mutableStateOf<Int?>(null) }
 
-    // 디버깅을 위한 정보 출력
-    LaunchedEffect(notices, boundingBoxes) {
-        println("BoundingBoxOverlay - 전달된 notices 수: ${notices.size}")
-        println("BoundingBoxOverlay - 바운딩 박스 수: ${boundingBoxes.size}")
-    }
+    // dp 값들 정의
+    val cardWidth = 240.dp
+    val horizontalPadding = 16.dp
+    val verticalPadding = 16.dp
+    val tooltipHeight = 160.dp // 대략적인 툴팁 높이
+    val iconSize = 24.dp
+
+    // dp to pixels 변환 준비
+    val cardWidthPx = with(density) { cardWidth.toPx() }
+    val horizontalPaddingPx = with(density) { horizontalPadding.toPx() }
+    val verticalPaddingPx = with(density) { verticalPadding.toPx() }
+    val tooltipHeightPx = with(density) { tooltipHeight.toPx() }
+    val iconSizePx = with(density) { iconSize.toPx() }
 
     Box(
         modifier = Modifier
@@ -725,15 +736,16 @@ fun BoundingBoxOverlay(
                 Box(
                     modifier = Modifier
                         .offset(
-                            x = with(density) { boxX.toDp() - 12.dp },
-                            y = with(density) { boxY.toDp() - 12.dp }
+                            x = with(density) { (boxX - iconSizePx/2).toDp() },
+                            y = with(density) { (boxY - iconSizePx/2).toDp() }
                         )
+                        .zIndex(3f) // 경고 아이콘에 더 높은 z-index 부여
                 ) {
                     // 경고 아이콘
                     IconButton(
                         onClick = { expandedNoticeId = if (expandedNoticeId == index) null else index },
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(iconSize)
                             .background(Color(0xFFFF9800), CircleShape)
                     ) {
                         Icon(
@@ -742,67 +754,131 @@ fun BoundingBoxOverlay(
                             tint = Color.White
                         )
                     }
+                }
+            }
+        }
 
-                    // 알림 내용 툴팁 (클릭 시 표시)
-                    if (expandedNoticeId == index) {
-                        val cardWidth = 240.dp
-                        // 카드가 화면 바깥으로 나가지 않도록 위치 조정
-                        val isRightSide = boxX > displayWidth / 2
+        // 배경 오버레이 (툴팁이 표시될 때만)
+        if (expandedNoticeId != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(9f) // 툴팁 아래, 나머지 요소 위에
+                    .background(Color.Black.copy(alpha = 0.1f)) // 약간 어두운 배경
+                    .clickable { expandedNoticeId = null } // 바깥 클릭시 툴팁 닫기
+            )
+        }
 
-                        Card(
-                            modifier = Modifier
-                                .width(cardWidth)
-                                .padding(top = 32.dp)
-                                .align(if (isRightSide) Alignment.TopEnd else Alignment.TopStart)
-                                .offset(
-                                    x = if (isRightSide) (-cardWidth + 24.dp) else 0.dp
-                                ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color.White
-                            ),
-                            elevation = CardDefaults.cardElevation(
-                                defaultElevation = 4.dp
+        // 알림 툴팁을 별도의 레이어로 표시 (가장 높은 z-index)
+        notices.forEachIndexed { index, notice ->
+            if (!notice.notice.isNullOrEmpty() && expandedNoticeId == index) {
+                val boxX = notice.boundingBox.x1 * widthRatio
+                val boxY = notice.boundingBox.y1 * heightRatio
+
+                // 툴팁 위치 계산
+                val isRightHalf = boxX > displayWidth / 2
+                val isTopHalf = boxY < displayHeight / 2
+
+                // X 좌표 계산 (화면 밖으로 나가지 않도록)
+                val xOffset = if (isRightHalf) {
+                    // 오른쪽에 있는 경우, 왼쪽으로 툴팁 표시 (화면 밖으로 나가지 않게)
+                    val idealX = boxX - cardWidthPx
+                    val safeX = if (idealX < horizontalPaddingPx) horizontalPaddingPx else idealX
+                    with(density) { safeX.toDp() }
+                } else {
+                    // 왼쪽에 있는 경우, 오른쪽으로 툴팁 표시 (화면 밖으로 나가지 않게)
+                    val idealX = boxX
+                    val rightEdge = idealX + cardWidthPx
+                    val safeX = if (rightEdge > displayWidth - horizontalPaddingPx) {
+                        displayWidth - cardWidthPx - horizontalPaddingPx
+                    } else {
+                        idealX
+                    }
+                    with(density) { safeX.toDp() }
+                }
+
+                // Y 좌표 계산 (화면 밖으로 나가지 않도록)
+                val yOffset = if (isTopHalf) {
+                    // 상단에 있는 경우
+                    val idealY = boxY
+                    val safeY = if (idealY < verticalPaddingPx) verticalPaddingPx else idealY
+                    with(density) { safeY.toDp() }
+                } else {
+                    // 하단에 있는 경우
+                    val idealY = boxY - tooltipHeightPx / 2
+                    val bottomEdge = idealY + tooltipHeightPx
+                    val safeY = if (bottomEdge > displayHeight - verticalPaddingPx) {
+                        displayHeight - tooltipHeightPx - verticalPaddingPx
+                    } else {
+                        idealY
+                    }
+                    with(density) { safeY.toDp() }
+                }
+
+                // 카드 위치를 모달로 띄우기 (오버레이)
+                Box(modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(10f) // 다른 모든 요소 위에 표시
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .width(cardWidth)
+                            .padding(all = 0.dp)
+                            .offset(
+                                x = xOffset,
+                                y = yOffset
                             )
+                            // 툴팁 클릭은 이벤트 전파 중단 (배경 클릭만 닫기 기능 활성화)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { /* 툴팁 내부 클릭은 무시, 이벤트 전파 중단 */ }
+                            ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 8.dp // 더 명확한 구분을 위해 그림자 강화
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp)
-                            ) {
-                                // 원본 텍스트
-                                if (notice.text.isNotEmpty()) {
-                                    Text(
-                                        text = "\"${notice.text}\"",
-                                        color = Color.Black,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.padding(bottom = 8.dp)
-                                    )
-                                }
-
-                                // 알림 내용
+                            // 원본 텍스트
+                            if (notice.text.isNotEmpty()) {
                                 Text(
-                                    text = "주의",
-                                    color = Color(0xFFFF9800),
+                                    text = "\"${notice.text}\"",
+                                    color = Color.Black,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                            }
+
+                            // 알림 내용
+                            Text(
+                                text = "주의",
+                                color = Color(0xFFFF9800),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = notice.notice,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                fontSize = 14.sp
+                            )
+
+                            // 해결방법이 있는 경우만 표시
+                            if (notice.solution.isNotEmpty()) {
+                                Text(
+                                    text = "해결 방법",
+                                    color = Color(0xFF4CAF50),
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = notice.notice,
-                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    text = notice.solution,
                                     fontSize = 14.sp
                                 )
-
-                                // 해결방법이 있는 경우만 표시
-                                if (notice.solution.isNotEmpty()) {
-                                    Text(
-                                        text = "해결 방법",
-                                        color = Color(0xFF4CAF50),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = notice.solution,
-                                        fontSize = 14.sp
-                                    )
-                                }
                             }
                         }
                     }
