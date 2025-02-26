@@ -1,5 +1,6 @@
 package com.project.jibsin_project.scan.components
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,10 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import com.project.jibsin_project.scan.AIAnalysisResultActivity
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.BoundingBox
 import com.project.jibsin_project.utils.Contract
-import com.project.jibsin_project.utils.DocumentAnalyzer
 
 class DocumentReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +47,7 @@ class DocumentReviewActivity : ComponentActivity() {
 @Composable
 fun MultiPageDocumentReviewScreen(contractId: String) {
     val firestoreUtil = remember { FirestoreUtil() }
+    val context = LocalContext.current
     var contract by remember { mutableStateOf<Contract?>(null) }
     var currentDocumentType by remember { mutableStateOf("building_registry") }
     var currentPageIndex by remember { mutableStateOf(0) }
@@ -56,7 +58,6 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
     var imageHeight by remember { mutableStateOf(0f) }
     var imageWidthPx by remember { mutableStateOf(0) }
     var imageHeightPx by remember { mutableStateOf(0) }
-    val context = LocalContext.current
     val docTypeTabItems = listOf("건축물대장", "등기부등본", "계약서")
     val docTypeKeys = listOf("building_registry", "registry_document", "contract")
     var showNotices by remember { mutableStateOf(true) } // 알림 표시 여부 상태
@@ -128,6 +129,11 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
         "contract" -> contract?.contract?.getOrNull(currentPageIndex)?.imageUrl
         else -> null
     }
+
+    // 현재 마지막 페이지인지 확인
+    val isLastDocType = currentDocumentType == docTypeKeys.last()
+    val isLastPage = currentPageIndex == totalPages - 1
+    val isVeryLastPage = isLastDocType && isLastPage
 
     Scaffold(
         topBar = {
@@ -338,25 +344,43 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
                             Text("이전 페이지")
                         }
 
-                        TextButton(
-                            onClick = {
-                                if (currentPageIndex < totalPages - 1) {
-                                    currentPageIndex++
-                                } else {
-                                    // 마지막 페이지에서 다음 문서 타입의 첫 페이지로 이동
-                                    val currentTypeIndex = docTypeKeys.indexOf(currentDocumentType)
-                                    if (currentTypeIndex < docTypeKeys.size - 1) {
-                                        currentDocumentType = docTypeKeys[currentTypeIndex + 1]
-                                        currentPageIndex = 0
+                        // 마지막 페이지에서는 "요약" 버튼 표시, 그렇지 않으면 "다음 페이지" 버튼 표시
+                        if (isVeryLastPage) {
+                            Button(
+                                onClick = {
+                                    // AIAnalysisResultActivity로 이동
+                                    val intent = Intent(context, AIAnalysisResultActivity::class.java).apply {
+                                        putExtra("contractId", contractId)
                                     }
-                                }
-                            },
-                            enabled = currentPageIndex < totalPages - 1 || docTypeKeys.indexOf(currentDocumentType) < docTypeKeys.size - 1,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = Color(0xFF253F5A)
-                            )
-                        ) {
-                            Text("다음 페이지")
+                                    context.startActivity(intent)
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4CAF50)
+                                )
+                            ) {
+                                Text("요약", color = Color.White)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    if (currentPageIndex < totalPages - 1) {
+                                        currentPageIndex++
+                                    } else {
+                                        // 마지막 페이지에서 다음 문서 타입의 첫 페이지로 이동
+                                        val currentTypeIndex = docTypeKeys.indexOf(currentDocumentType)
+                                        if (currentTypeIndex < docTypeKeys.size - 1) {
+                                            currentDocumentType = docTypeKeys[currentTypeIndex + 1]
+                                            currentPageIndex = 0
+                                        }
+                                    }
+                                },
+                                enabled = currentPageIndex < totalPages - 1 || docTypeKeys.indexOf(currentDocumentType) < docTypeKeys.size - 1,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color(0xFF253F5A)
+                                )
+                            ) {
+                                Text("다음 페이지")
+                            }
                         }
                     }
                 }

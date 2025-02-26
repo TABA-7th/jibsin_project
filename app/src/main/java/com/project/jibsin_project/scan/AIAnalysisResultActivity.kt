@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,11 +40,12 @@ class AIAnalysisResultActivity : ComponentActivity() {
 @Composable
 fun AIAnalysisResultScreen(contractId: String) {
     var analysisResult by remember { mutableStateOf<Map<String, Any>?>(null) }
-    var contract by remember { mutableStateOf<Contract?>(null) }  // Contract 상태 추가
+    var contract by remember { mutableStateOf<Contract?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val documentAnalyzer = remember { DocumentAnalyzer() }
     val firestoreUtil = remember { FirestoreUtil() }
+    val context = LocalContext.current
 
     // 분석 결과 로딩
     LaunchedEffect(contractId) {
@@ -74,7 +77,20 @@ fun AIAnalysisResultScreen(contractId: String) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFFF9F9F9),
                     titleContentColor = Color(0xFF253F5A)
-                )
+                ),
+                navigationIcon = {
+                    // 뒤로가기 버튼 추가
+                    IconButton(onClick = {
+                        // Activity 종료
+                        (context as? ComponentActivity)?.finish()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = Color(0xFF253F5A)
+                        )
+                    }
+                }
             )
         }
     ) { padding ->
@@ -157,7 +173,6 @@ fun AIAnalysisResultScreen(contractId: String) {
     }
 }
 
-// 기존 UI 컴포넌트들은 동일하게 유지...
 @Composable
 fun DocumentInfoSection(result: Map<String, Any>?) {
     Card(
