@@ -51,6 +51,7 @@
         <activity android:name=".chatbot.ChatBotActivity" />
         <activity android:name=".scan.AIAnalysisResultActivity" />
         <activity android:name=".scan.components.DocumentReviewActivity" />
+        <activity android:name=".history.ContractHistoryActivity" />
 
     </application>
 

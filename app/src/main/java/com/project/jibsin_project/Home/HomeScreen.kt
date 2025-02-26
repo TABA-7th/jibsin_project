@@ -1,11 +1,9 @@
 package com.project.jibsin_project.Home
 
 import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,15 +14,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.project.jibsin_project.R
+import com.project.jibsin_project.history.ContractHistoryActivity
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +34,7 @@ fun HomeScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -94,11 +94,28 @@ fun HomeScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        NavigationMenuItem("마이페이지")
+                        NavigationMenuItem("마이페이지", onClick = {
+                            scope.launch {
+                                drawerState.close()
+                            }
+                            // 마이페이지로 이동하는 코드 추가 (필요시)
+                        })
                         Divider(color = Color.LightGray, thickness = 1.dp)
-                        NavigationMenuItem("조회 내역")
+                        NavigationMenuItem("경고 내역", onClick = {
+                            scope.launch {
+                                drawerState.close()
+                            }
+                            // 경고 내역으로 이동하는 코드 추가 (필요시)
+                        })
                         Divider(color = Color.LightGray, thickness = 1.dp)
-                        NavigationMenuItem("나의 계약 내역")
+                        NavigationMenuItem("나의 계약 내역", onClick = {
+                            scope.launch {
+                                drawerState.close()
+                            }
+                            // 계약 내역 화면으로 이동
+                            val intent = Intent(context, ContractHistoryActivity::class.java)
+                            context.startActivity(intent)
+                        })
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -187,12 +204,13 @@ fun HomeScreen(
 }
 
 @Composable
-fun NavigationMenuItem(label: String) {
+fun NavigationMenuItem(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .background(Color(0xFFF0F0F0)),
+            .background(Color(0xFFF0F0F0))
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
