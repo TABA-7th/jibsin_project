@@ -10,11 +10,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -34,6 +37,9 @@ import com.project.jibsin_project.scan.AIAnalysisResultActivity
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.BoundingBox
 import com.project.jibsin_project.utils.Contract
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 class DocumentReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -399,270 +405,56 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
     }
 }
 
-private fun extractNotices(analysisResult: Map<String, Any>): List<Notice> {
-    val notices = mutableListOf<Notice>()
-
-    try {
-        println("분석 결과 키: ${analysisResult.keys.joinToString()}")
-
-        // 1. analysisResult는 다양한 형태로 제공될 수 있음
-        // 방법 1: 직접 result 필드 확인
-        val resultFromField = analysisResult["result"] as? Map<*, *>
-
-        // 방법 2: analysisResult 자체가 result일 수도 있음
-        // 방법 3: analysisResult에 다른 분석 결과 필드가 있을 수 있음
-
-        // 모든 가능한 데이터 소스 확인
-        val dataSources = listOfNotNull(
-            resultFromField,                    // result 필드
-            analysisResult,                     // 전체 결과
-            analysisResult["analysisResult"] as? Map<*, *>,  // analysisResult 필드
-            analysisResult["data"] as? Map<*, *>,            // data 필드
-            analysisResult["analysis"] as? Map<*, *>         // analysis 필드
-        )
-
-        // 각 데이터 소스에서 문서 타입별 데이터 확인
-        for (source in dataSources) {
-            println("데이터 소스 키: ${source.keys.joinToString()}")
-
-            // 1. 건축물대장
-            extractDocumentData(source, "building_registry", notices)
-
-            // 2. 등기부등본
-            extractDocumentData(source, "registry_document", notices)
-
-            // 3. 계약서
-            extractDocumentData(source, "contract", notices)
-        }
-
-        println("추출된 전체 알림 수: ${notices.size}")
-    } catch (e: Exception) {
-        println("알림 추출 중 오류 발생: ${e.message}")
-        e.printStackTrace()
-    }
-
-    return notices
-}
-
-// 문서 타입별 데이터 추출
-private fun extractDocumentData(
-    source: Map<*, *>,
-    documentType: String,
-    notices: MutableList<Notice>
+// 스크롤바 UI 개선 - 수정된 부분
+@Composable
+fun CustomScrollbar(
+    scrollState: androidx.compose.foundation.ScrollState,
+    height: Dp,
+    modifier: Modifier = Modifier
 ) {
-    try {
-        // 1. 직접 문서 타입 키 확인
-        val documentData = source[documentType] as? Map<*, *>
-        if (documentData != null) {
-            println("$documentType 데이터 있음 (케이스 1)")
-            // 페이지 데이터 추출
-            documentData.forEach { (page, pageData) ->
-                if (pageData is Map<*, *>) {
-                    extractNoticesFromPage(pageData, documentType, notices)
-                }
-            }
-            return
+    if (scrollState.maxValue > 0) {
+        val scrollRatio = scrollState.value.toFloat() / scrollState.maxValue.toFloat()
+        val trackHeight = height - 16.dp  // 패딩 고려
+
+        // 수정된 부분: Dp 타입을 명확하게 처리
+        val ratio = minOf(1f, height.value / scrollState.maxValue.toFloat())
+        val handleHeight = maxOf(40.dp, trackHeight * ratio)
+        val offsetY = (trackHeight - handleHeight) * scrollRatio
+
+        Box(
+            modifier = modifier
+                .height(height)
+                .width(4.dp)
+                .padding(vertical = 8.dp)
+        ) {
+            // 스크롤바 트랙
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(2.dp))
+            )
+
+            // 스크롤바 핸들
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(handleHeight)
+                    .offset(y = offsetY)
+                    .background(Color.Gray.copy(alpha = 0.6f), RoundedCornerShape(2.dp))
+            )
         }
-
-        // 2. notices 또는 warnings 키로 직접 알림 데이터 확인
-        val directNotices = source["notices"] as? Map<*, *>
-            ?: source["warnings"] as? Map<*, *>
-            ?: source["alerts"] as? Map<*, *>
-
-        if (directNotices != null) {
-            println("직접 알림 데이터 있음 (케이스 2)")
-            val typeNotices = directNotices[documentType] as? List<*>
-            if (typeNotices != null) {
-                typeNotices.forEach { item ->
-                    if (item is Map<*, *>) {
-                        val bbox = item["bounding_box"] as? Map<*, *>
-                        val notice = item["message"] as? String
-                            ?: item["notice"] as? String
-                            ?: item["text"] as? String
-                            ?: ""
-                        val solution = item["solution"] as? String ?: ""
-
-                        if (bbox != null) {
-                            notices.add(
-                                Notice(
-                                    documentType = documentType,
-                                    boundingBox = BoundingBox(
-                                        x1 = (bbox["x1"] as? Number)?.toInt() ?: 0,
-                                        x2 = (bbox["x2"] as? Number)?.toInt() ?: 0,
-                                        y1 = (bbox["y1"] as? Number)?.toInt() ?: 0,
-                                        y2 = (bbox["y2"] as? Number)?.toInt() ?: 0
-                                    ),
-                                    notice = notice,
-                                    text = item["original_text"] as? String ?: "",
-                                    solution = solution
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. 각 문서 타입의 페이지 내에 alerts, notices, warnings 키 확인
-        source.forEach { (key, value) ->
-            if (value is Map<*, *> && key.toString().contains(documentType, ignoreCase = true)) {
-                println("$key 키에서 $documentType 관련 데이터 확인 (케이스 3)")
-
-                // 페이지 데이터 순회
-                value.forEach { (_, pageData) ->
-                    if (pageData is Map<*, *>) {
-                        val pageNotices = pageData["notices"] as? List<*>
-                            ?: pageData["warnings"] as? List<*>
-                            ?: pageData["alerts"] as? List<*>
-
-                        if (pageNotices != null) {
-                            pageNotices.forEach { item ->
-                                if (item is Map<*, *>) {
-                                    val bbox = item["bounding_box"] as? Map<*, *>
-                                    val notice = item["message"] as? String
-                                        ?: item["notice"] as? String
-                                        ?: item["text"] as? String
-                                        ?: ""
-                                    val solution = item["solution"] as? String ?: ""
-
-                                    if (bbox != null) {
-                                        notices.add(
-                                            Notice(
-                                                documentType = documentType,
-                                                boundingBox = BoundingBox(
-                                                    x1 = (bbox["x1"] as? Number)?.toInt() ?: 0,
-                                                    x2 = (bbox["x2"] as? Number)?.toInt() ?: 0,
-                                                    y1 = (bbox["y1"] as? Number)?.toInt() ?: 0,
-                                                    y2 = (bbox["y2"] as? Number)?.toInt() ?: 0
-                                                ),
-                                                notice = notice,
-                                                text = item["original_text"] as? String ?: "",
-                                                solution = solution
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        println("$documentType 데이터 추출 중 오류: ${e.message}")
     }
 }
 
-private fun extractNoticesFromPage(
-    pageData: Map<*, *>,
-    documentType: String,
-    notices: MutableList<Notice>
-) {
-    try {
-        // 1. 일반적인 섹션 데이터 처리
-        pageData.forEach { (key, sectionData) ->
-            if (sectionData is Map<*, *> && key.toString() != "image_dimensions") {
-                // 1.1 바운딩 박스와 알림 직접 확인
-                val boundingBox = sectionData["bounding_box"] as? Map<*, *>
-                val noticeText = sectionData["notice"] as? String
-                    ?: sectionData["warning"] as? String
-                    ?: sectionData["alert"] as? String
-                    ?: sectionData["message"] as? String
-                val text = sectionData["text"] as? String
-                    ?: sectionData["original_text"] as? String
-                    ?: ""
-
-                // 바운딩 박스가 있고, 알림이나 텍스트가 있는 경우 알림 추가
-                if (boundingBox != null && (!noticeText.isNullOrEmpty() || !text.isNullOrEmpty())) {
-                    notices.add(
-                        Notice(
-                            documentType = documentType,
-                            boundingBox = BoundingBox(
-                                x1 = (boundingBox["x1"] as? Number)?.toInt() ?: 0,
-                                x2 = (boundingBox["x2"] as? Number)?.toInt() ?: 0,
-                                y1 = (boundingBox["y1"] as? Number)?.toInt() ?: 0,
-                                y2 = (boundingBox["y2"] as? Number)?.toInt() ?: 0
-                            ),
-                            notice = noticeText ?: "",
-                            text = text,
-                            solution = (sectionData["solution"] as? String) ?: ""
-                        )
-                    )
-                }
-
-                // 1.2 해당 섹션에 notices 또는 warnings 배열이 있는지 확인
-                val sectionNotices = sectionData["notices"] as? List<*>
-                    ?: sectionData["warnings"] as? List<*>
-                    ?: sectionData["alerts"] as? List<*>
-
-                if (sectionNotices != null) {
-                    sectionNotices.forEach { item ->
-                        if (item is Map<*, *>) {
-                            val bbox = item["bounding_box"] as? Map<*, *> ?: boundingBox
-                            val notice = item["message"] as? String
-                                ?: item["notice"] as? String
-                                ?: item["text"] as? String
-                                ?: ""
-
-                            if (bbox != null) {
-                                notices.add(
-                                    Notice(
-                                        documentType = documentType,
-                                        boundingBox = BoundingBox(
-                                            x1 = (bbox["x1"] as? Number)?.toInt() ?: 0,
-                                            x2 = (bbox["x2"] as? Number)?.toInt() ?: 0,
-                                            y1 = (bbox["y1"] as? Number)?.toInt() ?: 0,
-                                            y2 = (bbox["y2"] as? Number)?.toInt() ?: 0
-                                        ),
-                                        notice = notice,
-                                        text = item["original_text"] as? String ?: "",
-                                        solution = (item["solution"] as? String) ?: ""
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. 페이지 전체에 대한 notices 또는 warnings 확인
-        val pageNotices = pageData["notices"] as? List<*>
-            ?: pageData["warnings"] as? List<*>
-            ?: pageData["alerts"] as? List<*>
-
-        if (pageNotices != null) {
-            pageNotices.forEach { item ->
-                if (item is Map<*, *>) {
-                    val bbox = item["bounding_box"] as? Map<*, *>
-                    val notice = item["message"] as? String
-                        ?: item["notice"] as? String
-                        ?: item["text"] as? String
-                        ?: ""
-
-                    if (bbox != null) {
-                        notices.add(
-                            Notice(
-                                documentType = documentType,
-                                boundingBox = BoundingBox(
-                                    x1 = (bbox["x1"] as? Number)?.toInt() ?: 0,
-                                    x2 = (bbox["x2"] as? Number)?.toInt() ?: 0,
-                                    y1 = (bbox["y1"] as? Number)?.toInt() ?: 0,
-                                    y2 = (bbox["y2"] as? Number)?.toInt() ?: 0
-                                ),
-                                notice = notice,
-                                text = item["original_text"] as? String ?: "",
-                                solution = (item["solution"] as? String) ?: ""
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        println("페이지 알림 추출 중 오류 발생: ${e.message}")
-        e.printStackTrace()
+// 특약사항 텍스트 처리 함수
+fun formatSpecialTermText(text: String, key: String = ""): String {
+    // "특약사항" 또는 "특약"이 포함된 키인지 확인
+    if ((key.contains("특약사항") || key.contains("특약") || text.contains("특약")) && text.length > 100) {
+        // 첫 줄이나 첫 50자까지만 표시
+        val firstPart = text.take(50)
+        return "$firstPart...(이하생략)"
     }
+    return text
 }
 
 @Composable
@@ -678,13 +470,16 @@ fun BoundingBoxOverlay(
     val widthRatio = displayWidth / originalWidth
     val heightRatio = displayHeight / originalHeight
     var expandedNoticeId by remember { mutableStateOf<Int?>(null) }
+    val currentDate = remember { Calendar.getInstance().time }
+    val dateFormatter = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val currentDateString = remember { dateFormatter.format(currentDate) }
 
     // dp 값들 정의
-    val cardWidth = 240.dp
+    val cardWidth = 260.dp
     val horizontalPadding = 16.dp
     val verticalPadding = 16.dp
-    val tooltipHeight = 160.dp // 대략적인 툴팁 높이
-    val iconSize = 24.dp
+    val tooltipHeight = 280.dp
+    val iconSize = 16.dp
 
     // dp to pixels 변환 준비
     val cardWidthPx = with(density) { cardWidth.toPx() }
@@ -692,6 +487,122 @@ fun BoundingBoxOverlay(
     val verticalPaddingPx = with(density) { verticalPadding.toPx() }
     val tooltipHeightPx = with(density) { tooltipHeight.toPx() }
     val iconSizePx = with(density) { iconSize.toPx() }
+
+    // 날짜 형식 확인 및 비교 함수
+    fun isDateEqual(dateText: String): Boolean {
+        try {
+            // 다양한 날짜 포맷 처리
+            val formats = listOf(
+                "yyyy-MM-dd",
+                "yyyy년 MM월 dd일",
+                "yyyy년 MM월 d일",
+                "yyyy년 M월 d일",
+                "yyyy년 M월 dd일",
+                "yyyy.MM.dd"
+            )
+
+            for (format in formats) {
+                try {
+                    val parser = SimpleDateFormat(format, Locale.getDefault())
+                    val date = parser.parse(dateText.trim())
+                    val dateStr = dateFormatter.format(date)
+                    return dateStr == currentDateString
+                } catch (e: Exception) {
+                    // 파싱 실패시 다음 포맷 시도
+                    continue
+                }
+            }
+
+            // 날짜에 "년", "월", "일"이 포함된 경우 직접 파싱 시도
+            if (dateText.contains("년") && dateText.contains("월") && dateText.contains("일")) {
+                val year = dateText.substringBefore("년").trim()
+                    .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+                val month = dateText.substringAfter("년").substringBefore("월").trim()
+                    .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+                val day = dateText.substringAfter("월").substringBefore("일").trim()
+                    .filter { it.isDigit() }.toIntOrNull() ?: return false
+
+                val cal = Calendar.getInstance()
+                cal.time = currentDate
+
+                return year == cal.get(Calendar.YEAR) &&
+                        month == cal.get(Calendar.MONTH) + 1 &&
+                        day == cal.get(Calendar.DAY_OF_MONTH)
+            }
+
+            return false
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    // 위험 수준 결정 함수
+    fun determineRiskLevel(notice: Notice): RiskLevel {
+        // 바운딩 박스가 (0,0,0,0)인 경우 표시 안함
+        if (notice.boundingBox.x1 == 0 && notice.boundingBox.y1 == 0 &&
+            notice.boundingBox.x2 == 0 && notice.boundingBox.y2 == 0) {
+            return RiskLevel.NONE
+        }
+
+        // NA 텍스트인 경우 표시 안함
+        if (notice.text == "NA") {
+            return RiskLevel.NONE
+        }
+
+        // 기본은 경고(주황색)로 시작
+        var riskLevel = RiskLevel.WARNING
+
+        // 문제 없음인 경우 표시 안함
+        if (notice.notice == "문제 없음") {
+            return RiskLevel.NONE
+        }
+
+        // 계약서의 보증금_1 키에 대한 위험 처리
+        if (notice.documentType == "contract" && notice.key == "보증금_1" && notice.notice != "문제 없음") {
+            return RiskLevel.DANGER
+        }
+
+        // 임대인, 소유자, 성명 관련 위험 처리
+        if ((notice.documentType == "contract" && notice.key == "임대인") ||
+            (notice.documentType == "registry_document" && notice.key.contains("소유자")) ||
+            (notice.documentType == "building_registry" && notice.key.contains("성명"))) {
+            if (notice.notice != "문제 없음") {
+                return RiskLevel.DANGER
+            }
+        }
+
+        // 등기부등본 특정 키워드 확인 (항상 위험)
+        if (notice.documentType == "registry_document") {
+            val dangerKeywords = listOf("주택임차권", "신탁", "압류", "가처분", "가압류", "경매개시결정", "가등기")
+            for (keyword in dangerKeywords) {
+                if (notice.key.contains(keyword)) {
+                    return RiskLevel.DANGER
+                }
+            }
+        }
+
+        // 발급일자 확인
+        if ((notice.documentType == "registry_document" && notice.key == "발급일자") ||
+            (notice.documentType == "building_registry" && notice.key == "발급일자")) {
+            val noticeDate = notice.text.trim()
+            if (!isDateEqual(noticeDate)) {
+                return RiskLevel.DANGER
+            }
+        }
+
+        // 주소 정보 관련 위험 처리
+        if ((notice.documentType == "contract" && (notice.key == "소재지" || notice.key == "임차할부분")) ||
+            (notice.documentType == "building_registry" && (notice.key == "대지위치" || notice.key == "도로명주소")) ||
+            (notice.documentType == "registry_document" && notice.key == "건물주소")) {
+            if (notice.notice != "문제 없음") {
+                return RiskLevel.DANGER
+            }
+        }
+
+        return riskLevel
+    }
 
     Box(
         modifier = Modifier
@@ -728,10 +639,20 @@ fun BoundingBoxOverlay(
 
         // 알림이 있는 바운딩 박스에 경고 아이콘 표시
         notices.forEachIndexed { index, notice ->
-            // 알림 내용이 있는 경우에만 아이콘 표시
-            if (!notice.notice.isNullOrEmpty()) {
+            // 위험 수준에 따라 표시 여부와 색상 결정
+            val riskLevel = determineRiskLevel(notice)
+
+            // NONE이 아닐 때만 알림 표시
+            if (riskLevel != RiskLevel.NONE) {
                 val boxX = notice.boundingBox.x1 * widthRatio
                 val boxY = notice.boundingBox.y1 * heightRatio
+
+                // 위험 수준에 따른 색상 결정
+                val backgroundColor = when (riskLevel) {
+                    RiskLevel.DANGER -> Color(0xFFE53935) // 빨간색
+                    RiskLevel.WARNING -> Color(0xFFFF9800) // 주황색
+                    else -> Color(0xFF4CAF50) // 초록색 (사용되지는 않음)
+                }
 
                 Box(
                     modifier = Modifier
@@ -746,74 +667,98 @@ fun BoundingBoxOverlay(
                         onClick = { expandedNoticeId = if (expandedNoticeId == index) null else index },
                         modifier = Modifier
                             .size(iconSize)
-                            .background(Color(0xFFFF9800), CircleShape)
+                            .background(backgroundColor, CircleShape),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = backgroundColor
+                        )
                     ) {
                         Icon(
                             Icons.Default.Warning,
                             contentDescription = "경고",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp) // 아이콘 내부 크기 조정
                         )
                     }
                 }
             }
         }
 
-        // 배경 오버레이 (툴팁이 표시될 때만)
+        // 배경 오버레이 (툴팁이 표시될 때만) - 더 어두운 배경으로 변경
         if (expandedNoticeId != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(9f) // 툴팁 아래, 나머지 요소 위에
-                    .background(Color.Black.copy(alpha = 0.1f)) // 약간 어두운 배경
+                    .background(Color.Black.copy(alpha = 0.6f)) // 더 어두운 배경으로 변경
                     .clickable { expandedNoticeId = null } // 바깥 클릭시 툴팁 닫기
             )
         }
 
-        // 알림 툴팁을 별도의 레이어로 표시 (가장 높은 z-index)
-        notices.forEachIndexed { index, notice ->
-            if (!notice.notice.isNullOrEmpty() && expandedNoticeId == index) {
+// 알림 툴팁을 별도의 레이어로 표시 (가장 높은 z-index)
+        if (expandedNoticeId != null && expandedNoticeId!! < notices.size) {
+            val notice = notices[expandedNoticeId!!]
+
+            // 위험 수준에 따라 표시 여부와 색상 결정
+            val riskLevel = determineRiskLevel(notice)
+
+            // NONE이 아닐 때만 툴팁 표시
+            if (riskLevel != RiskLevel.NONE) {
                 val boxX = notice.boundingBox.x1 * widthRatio
                 val boxY = notice.boundingBox.y1 * heightRatio
 
-                // 툴팁 위치 계산
-                val isRightHalf = boxX > displayWidth / 2
-                val isTopHalf = boxY < displayHeight / 2
-
-                // X 좌표 계산 (화면 밖으로 나가지 않도록)
-                val xOffset = if (isRightHalf) {
-                    // 오른쪽에 있는 경우, 왼쪽으로 툴팁 표시 (화면 밖으로 나가지 않게)
-                    val idealX = boxX - cardWidthPx
-                    val safeX = if (idealX < horizontalPaddingPx) horizontalPaddingPx else idealX
-                    with(density) { safeX.toDp() }
-                } else {
-                    // 왼쪽에 있는 경우, 오른쪽으로 툴팁 표시 (화면 밖으로 나가지 않게)
-                    val idealX = boxX
-                    val rightEdge = idealX + cardWidthPx
-                    val safeX = if (rightEdge > displayWidth - horizontalPaddingPx) {
-                        displayWidth - cardWidthPx - horizontalPaddingPx
-                    } else {
-                        idealX
-                    }
-                    with(density) { safeX.toDp() }
+                // 위험 수준에 따른 색상 결정 (테두리 없음)
+                val titleColor = when (riskLevel) {
+                    RiskLevel.DANGER -> Color(0xFFE53935) // 빨간색
+                    RiskLevel.WARNING -> Color(0xFFFF9800) // 주황색
+                    else -> Color(0xFF4CAF50) // 초록색 (사용되지는 않음)
                 }
 
-                // Y 좌표 계산 (화면 밖으로 나가지 않도록)
-                val yOffset = if (isTopHalf) {
-                    // 상단에 있는 경우
-                    val idealY = boxY
-                    val safeY = if (idealY < verticalPaddingPx) verticalPaddingPx else idealY
-                    with(density) { safeY.toDp() }
+                // 툴팁 위치 계산 개선 - 항상 화면 안에 표시되도록
+                val halfScreenWidth = displayWidth / 2
+                val halfScreenHeight = displayHeight / 2
+
+                // 화면을 4분면으로 나눠서 처리
+                val isRightHalf = boxX > halfScreenWidth
+                val isTopHalf = boxY < halfScreenHeight
+
+                // X 좌표 계산 - 화면 안에 들어오도록
+                // 기본 좌표 계산
+                val rawXOffset = if (isRightHalf) {
+                    (boxX - cardWidthPx) // 오른쪽에 있는 경우 왼쪽으로
                 } else {
-                    // 하단에 있는 경우
-                    val idealY = boxY - tooltipHeightPx / 2
-                    val bottomEdge = idealY + tooltipHeightPx
-                    val safeY = if (bottomEdge > displayHeight - verticalPaddingPx) {
-                        displayHeight - tooltipHeightPx - verticalPaddingPx
-                    } else {
-                        idealY
-                    }
-                    with(density) { safeY.toDp() }
+                    boxX // 왼쪽에 있는 경우 오른쪽으로
                 }
+
+                // 화면 경계 체크 및 보정
+                val safeXOffset = when {
+                    rawXOffset < horizontalPaddingPx -> horizontalPaddingPx // 왼쪽 경계 넘어감
+                    rawXOffset + cardWidthPx > displayWidth - horizontalPaddingPx ->
+                        displayWidth - cardWidthPx - horizontalPaddingPx // 오른쪽 경계 넘어감
+                    else -> rawXOffset
+                }
+
+                // Y 좌표 계산 - 화면 안에 들어오도록
+                // 기본 좌표 계산 (위아래 여유공간 필요)
+                val rawYOffset = if (isTopHalf) {
+                    boxY // 상단에 있는 경우
+                } else {
+                    boxY - tooltipHeightPx // 하단에 있는 경우 위로
+                }
+
+                // 화면 경계 체크 및 보정
+                val safeYOffset = when {
+                    rawYOffset < verticalPaddingPx -> verticalPaddingPx // 상단 경계 넘어감
+                    rawYOffset + tooltipHeightPx > displayHeight - verticalPaddingPx ->
+                        displayHeight - tooltipHeightPx - verticalPaddingPx // 하단 경계 넘어감
+                    else -> rawYOffset
+                }
+
+                // dp로 변환
+                val xOffset = with(density) { safeXOffset.toDp() }
+                val yOffset = with(density) { safeYOffset.toDp() }
+
+                // 특약사항 키인지 확인하고 텍스트 처리
+                val displayText = formatSpecialTermText(notice.text, notice.key)
 
                 // 카드 위치를 모달로 띄우기 (오버레이)
                 Box(modifier = Modifier
@@ -823,12 +768,13 @@ fun BoundingBoxOverlay(
                     Card(
                         modifier = Modifier
                             .width(cardWidth)
+                            .height(tooltipHeight) // 고정 높이 설정
                             .padding(all = 0.dp)
                             .offset(
                                 x = xOffset,
                                 y = yOffset
                             )
-                            // 툴팁 클릭은 이벤트 전파 중단 (배경 클릭만 닫기 기능 활성화)
+                            // 툴팁 클릭은 이벤트 전파 중단
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -839,51 +785,87 @@ fun BoundingBoxOverlay(
                         ),
                         elevation = CardDefaults.cardElevation(
                             defaultElevation = 8.dp // 더 명확한 구분을 위해 그림자 강화
-                        )
+                        ),
+                        shape = RoundedCornerShape(8.dp) // 모서리 둥글게
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
+                        // 내부 레이아웃
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp)
                         ) {
-                            // 원본 텍스트
-                            if (notice.text.isNotEmpty()) {
+                            // 스크롤 상태
+                            val scrollState = rememberScrollState()
+
+                            // 스크롤 가능한 컬럼
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(scrollState)
+                                    .padding(PaddingValues(top = 16.dp, bottom = 16.dp, end = 12.dp)) // 명시적 PaddingValues 사용
+                            ) {
+                                // 원본 텍스트 (스크롤 내부에 포함)
+                                if (displayText.isNotEmpty() && displayText != "NA") {
+                                    Text(
+                                        text = "\"${displayText}\"",
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
+
+                                // 알림 유형
                                 Text(
-                                    text = "\"${notice.text}\"",
-                                    color = Color.Black,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text = if (riskLevel == RiskLevel.DANGER) "위험" else "주의",
+                                    color = titleColor,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(bottom = 8.dp)
                                 )
-                            }
 
-                            // 알림 내용
-                            Text(
-                                text = "주의",
-                                color = Color(0xFFFF9800),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = notice.notice,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                fontSize = 14.sp
-                            )
-
-                            // 해결방법이 있는 경우만 표시
-                            if (notice.solution.isNotEmpty()) {
+                                // 알림 내용
                                 Text(
-                                    text = "해결 방법",
-                                    color = Color(0xFF4CAF50),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = notice.solution,
+                                    text = notice.notice,
+                                    modifier = Modifier.padding(vertical = 8.dp),
                                     fontSize = 14.sp
                                 )
+
+                                // 해결방법이 있는 경우만 표시
+                                if (notice.solution.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "해결 방법",
+                                        color = Color(0xFF4CAF50),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = notice.solution,
+                                        fontSize = 14.sp
+                                    )
+                                }
+
+                                // 스크롤 여백 추가
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
+
+                            // 커스텀 스크롤바
+                            CustomScrollbar(
+                                scrollState = scrollState,
+                                height = tooltipHeight - 32.dp,
+                                modifier = Modifier.align(Alignment.CenterEnd)
+                            )
                         }
                     }
                 }
             }
         }
     }
+}
+
+// 위험 수준
+enum class RiskLevel {
+    NONE,      // 표시 안함
+    WARNING,   // 주황색 (경고)
+    DANGER     // 빨간색 (위험)
 }

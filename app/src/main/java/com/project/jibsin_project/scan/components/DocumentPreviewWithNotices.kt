@@ -25,7 +25,8 @@ data class Notice(
     val boundingBox: BoundingBox,
     val notice: String,
     val text: String,
-    val solution: String
+    val solution: String,
+    val key: String = ""
 )
 
 data class BoundingBox(
