@@ -33,13 +33,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import com.project.jibsin_project.history.WarningItem
+import com.project.jibsin_project.history.WarningLevel
 import com.project.jibsin_project.scan.AIAnalysisResultActivity
+import com.project.jibsin_project.scan.components.DocumentReviewActivity.Companion.getDocumentTypeKorean
+import com.project.jibsin_project.scan.components.DocumentReviewActivity.Companion.isHighRiskNotice
 import com.project.jibsin_project.utils.FirestoreUtil
 import com.project.jibsin_project.utils.BoundingBox
 import com.project.jibsin_project.utils.Contract
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class DocumentReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,6 +54,32 @@ class DocumentReviewActivity : ComponentActivity() {
 
         setContent {
             MultiPageDocumentReviewScreen(contractId)
+        }
+    }
+
+    // 문서 타입 한글 명칭 반환 함수
+    companion object {
+        fun getDocumentTypeKorean(documentType: String): String {
+            return when (documentType) {
+                "building_registry" -> "건축물대장"
+                "registry_document" -> "등기부등본"
+                "contract" -> "계약서"
+                else -> documentType
+            }
+        }
+
+        // 높은 위험 알림인지 판단하는 함수
+        fun isHighRiskNotice(notice: Notice): Boolean {
+            // 위험 키워드가 포함된 알림은 높은 위험으로 분류
+            val highRiskKeywords = listOf(
+                "보증금", "일치하지 않", "소유자", "임대인", "근저당", "압류",
+                "가압류", "가처분", "경매", "위험", "찾을 수 없", "불일치"
+            )
+
+            // 알림 내용에 위험 키워드가 포함되어 있는지 확인
+            return highRiskKeywords.any { keyword ->
+                notice.notice.contains(keyword)
+            }
         }
     }
 }
@@ -105,7 +137,6 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
 
             // 3. 발급일자 체크 및 알림 추가 (등기부등본과 건축물대장에만 적용)
             if (currentDocumentType == "registry_document" || currentDocumentType == "building_registry") {
-                // suspend 함수 호출
                 checkAndCreateDateAlert(
                     notices = noticesList,
                     documentType = currentDocumentType,
@@ -116,6 +147,35 @@ fun MultiPageDocumentReviewScreen(contractId: String) {
 
             // 4. 최종 알림 목록 설정
             notices = noticesList
+
+            // 5. 알림을 경고 내역으로 자동 저장 - 최초 페이지 로드 시 한 번만 수행
+            if (currentPageIndex == 0) {
+                // 알림 목록 순회
+                noticesList.forEach { notice ->
+                    // 문제가 있는 알림만 저장 ("문제 없음"이 아닌 알림)
+                    if (notice.notice != "문제 없음" && notice.notice.isNotEmpty()) {
+                        val warningLevel = if (DocumentReviewActivity.isHighRiskNotice(notice)) WarningLevel.DANGER else WarningLevel.WARNING
+
+                        // 경고 내역으로 변환
+                        val warningItem = WarningItem(
+                            id = UUID.randomUUID().toString(),
+                            level = warningLevel,
+                            message = notice.notice,
+                            solution = notice.solution,
+                            source = DocumentReviewActivity.getDocumentTypeKorean(notice.documentType),
+                            date = Date(),
+                            contractId = contractId
+                        )
+
+                        // LaunchedEffect 내부에서는 직접 suspend 함수 호출 가능
+                        try {
+                            firestoreUtil.saveWarning("test_user", warningItem)
+                        } catch (e: Exception) {
+                            println("경고 저장 중 오류: ${e.message}")
+                        }
+                    }
+                }
+            }
 
         } catch (e: Exception) {
             println("문서 데이터 로드 중 오류: ${e.message}")

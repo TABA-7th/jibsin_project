@@ -70,6 +70,21 @@ fun AIAnalysisResultScreen(contractId: String) {
         }
     }
 
+    LaunchedEffect(analysisResult) {
+        // Map<String, Any>?를 명시적으로 캐스팅하여 사용
+        val resultMap = analysisResult as? Map<String, Any>
+
+        if (resultMap != null && contract?.analysisStatus == "completed") {
+            // 분석 결과에서 자동으로 경고 내역 추출하여 저장
+            try {
+                firestoreUtil.saveWarningsFromAnalysis("test_user", contractId, resultMap)
+            } catch (e: Exception) {
+                // 오류 처리
+                println("경고 내역 저장 중 오류 발생: ${e.message}")
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
