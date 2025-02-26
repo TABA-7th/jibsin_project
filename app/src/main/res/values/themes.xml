@@ -14,4 +14,11 @@
         <item name="android:windowLightStatusBar">true</item> <!-- 상태바 아이콘을 어둡게 설정 -->
         <!-- Customize your theme here. -->
     </style>
+
+    <style name="Theme.Jibsin_project.NoActionBar" parent="Theme.Jibsin_project">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
 </resources>
