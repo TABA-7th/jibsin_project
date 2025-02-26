@@ -80,7 +80,7 @@ fun AIAnalysisResultScreen(contractId: String) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("문서 분석 요약", fontSize = 20.sp) },
+                title = { Text("문서 분석 결과", fontSize = 20.sp) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = backgroundColor,
                     titleContentColor = primaryColor
@@ -120,6 +120,12 @@ fun AIAnalysisResultScreen(contractId: String) {
                         // 계약서 요약 정보 (상단 알림 카드)
                         item {
                             SummaryCard(data)
+                        }
+
+                        // 유효성 검사 결과
+                        item {
+                            SectionTitle("유효성 검사 결과")
+                            ValidationResultCard(data)
                         }
 
                         // 계약 기본 정보
@@ -211,12 +217,22 @@ fun SectionTitle(title: String) {
 @Composable
 fun ContractBasicInfoCard(data: Map<String, Any>) {
     val contractId = data["contractId"] as? String ?: ""
-    val 소재지Map = (data["contract_details"] as? Map<*, *>)?.get("소재지") as? Map<*, *>
-    val 소재지 = 소재지Map?.get("text") as? String ?: "-"
-    val 임대인Map = (data["contract_details"] as? Map<*, *>)?.get("임대인") as? Map<*, *>
+    val contractDetails = data["contract_details"] as? Map<*, *> ?: mapOf<String, Any>()
+
+    // 임대인 정보
+    val 임대인Map = contractDetails["임대인"] as? Map<*, *>
     val 임대인 = 임대인Map?.get("text") as? String ?: "-"
-    val 임차할부분Map = (data["contract_details"] as? Map<*, *>)?.get("임차할부분") as? Map<*, *>
+    val 임대인Check = 임대인Map?.get("check") as? Boolean ?: false
+
+    // 소재지 정보
+    val 소재지Map = contractDetails["소재지"] as? Map<*, *>
+    val 소재지 = 소재지Map?.get("text") as? String ?: "-"
+    val 소재지Check = 소재지Map?.get("check") as? Boolean ?: false
+
+    // 임차할 부분 정보
+    val 임차할부분Map = contractDetails["임차할부분"] as? Map<*, *>
     val 임차할부분 = 임차할부분Map?.get("text") as? String ?: "-"
+    val 임차할부분Check = 임차할부분Map?.get("check") as? Boolean ?: false
 
     Card(
         modifier = Modifier
@@ -232,11 +248,112 @@ fun ContractBasicInfoCard(data: Map<String, Any>) {
         Column(modifier = Modifier.padding(16.dp)) {
             InfoRow("계약서 ID", contractId)
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRow("소재지", 소재지)
+
+            // 임대인 정보가 일치하지 않으면 경고 표시
+            if (임대인Check) { // true는 불일치
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "임대인",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray,
+                        modifier = Modifier.weight(0.3f)
+                    )
+
+                    Row(
+                        modifier = Modifier.weight(0.7f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "경고",
+                            tint = Color(0xFFE57373)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "임대인 정보가 일치하지 않습니다",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFE57373)
+                        )
+                    }
+                }
+            } else {
+                InfoRow("임대인", 임대인)
+            }
+
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRow("임대인", 임대인)
+
+            // 소재지 정보가 일치하지 않으면 경고 표시
+            if (소재지Check) { // true는 불일치
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "소재지",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray,
+                        modifier = Modifier.weight(0.3f)
+                    )
+
+                    Row(
+                        modifier = Modifier.weight(0.7f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "경고",
+                            tint = Color(0xFFE57373)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "주소 정보가 일치하지 않습니다",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFE57373)
+                        )
+                    }
+                }
+            } else {
+                InfoRow("소재지", 소재지)
+            }
+
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRow("임차할 부분", 임차할부분)
+
+            // 임차할 부분 정보가 일치하지 않으면 경고 표시
+            if (임차할부분Check) { // true는 불일치
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "임차할 부분",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Gray,
+                        modifier = Modifier.weight(0.3f)
+                    )
+
+                    Row(
+                        modifier = Modifier.weight(0.7f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "경고",
+                            tint = Color(0xFFE57373)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "임차 부분 정보가 일치하지 않습니다",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFE57373)
+                        )
+                    }
+                }
+            } else {
+                InfoRow("임차할 부분", 임차할부분)
+            }
         }
     }
 }
@@ -277,15 +394,61 @@ fun ContractDetailsCard(data: Map<String, Any>) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            InfoRowWithCheck("계약기간", 계약기간, 계약기간Check)
+            // true가 불일치(문제 있음), false가 일치(정상)
+            DetailWithWarning("계약기간", 계약기간, 계약기간Check)
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRowWithCheck("등기부등본", 등기부등본, 등기부등본Check)
+            DetailWithWarning("등기부등본", 등기부등본, 등기부등본Check)
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRowWithCheck("면적", 면적, 면적Check)
+            DetailWithWarning("면적", 면적, 면적Check)
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRowWithCheck("보증금", 보증금, 보증금Check)
+            DetailWithWarning("보증금", 보증금, 보증금Check)
             Divider(modifier = Modifier.padding(vertical = 8.dp))
-            InfoRowWithCheck("차임(월세)", 차임, 차임Check)
+            DetailWithWarning("차임", 차임, 차임Check)
+        }
+    }
+}
+
+@Composable
+fun DetailWithWarning(label: String, value: String, hasIssue: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.Gray,
+            modifier = Modifier.weight(0.3f)
+        )
+
+        Row(
+            modifier = Modifier.weight(0.7f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (hasIssue) Color(0xFFE57373) else Color.Black, // true일 때 빨간색(문제 있음)
+                modifier = Modifier.weight(1f)
+            )
+
+            if (hasIssue) { // true일 때 경고 아이콘
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "문제 있음",
+                    tint = Color(0xFFE57373),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            } else { // false일 때 체크 아이콘
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "정상",
+                    tint = Color(0xFF4CAF50),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
         }
     }
 }
@@ -367,46 +530,67 @@ fun InfoRow(label: String, value: String) {
 }
 
 @Composable
-fun InfoRowWithCheck(label: String, value: String, isValid: Boolean) {
+fun ValidationResultCard(data: Map<String, Any>) {
+    val contractDetails = data["contract_details"] as? Map<*, *> ?: mapOf<String, Any>()
+
+    // 임대인 정보 일치 여부 (false가 일치, true가 불일치)
+    val 임대인Map = contractDetails["임대인"] as? Map<*, *>
+    val 임대인Check = 임대인Map?.get("check") as? Boolean ?: false
+
+    // 주소 정보 일치 여부
+    val 소재지Map = contractDetails["소재지"] as? Map<*, *>
+    val 주소Check = 소재지Map?.get("check") as? Boolean ?: false
+
+    // 보증금 정보 일치 여부
+    val 보증금Map = contractDetails["보증금"] as? Map<*, *>
+    val 보증금Check = 보증금Map?.get("check") as? Boolean ?: false
+
+    // 등기부등본 정보 일치 여부
+    val 등기부등본Map = contractDetails["등기부등본"] as? Map<*, *>
+    val 등기부등본Check = 등기부등본Map?.get("check") as? Boolean ?: false
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            ValidationItem("임대인 정보 일치", !임대인Check) // false가 일치, true가 불일치
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            ValidationItem("주소 정보 일치", !주소Check) // false가 일치, true가 불일치
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            ValidationItem("보증금 정보 일치", !보증금Check) // false가 일치, true가 불일치
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            ValidationItem("등기부등본 검증", !등기부등본Check) // false가 일치, true가 불일치
+        }
+    }
+}
+
+@Composable
+fun ValidationItem(label: String, isValid: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.Gray,
-            modifier = Modifier.weight(0.3f)
+            color = Color.Gray
         )
 
-        Row(
-            modifier = Modifier.weight(0.7f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isValid) Color.Black else Color(0xFFE57373),
-                modifier = Modifier.weight(1f)
-            )
-
-            if (!isValid) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "문제 있음",
-                    tint = Color(0xFFE57373),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "정상",
-                    tint = Color(0xFF4CAF50),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-        }
+        Icon(
+            imageVector = if (isValid) Icons.Default.CheckCircle else Icons.Default.Info,
+            contentDescription = if (isValid) "일치" else "불일치",
+            tint = if (isValid) Color(0xFF4CAF50) else Color(0xFFE57373)
+        )
     }
 }
