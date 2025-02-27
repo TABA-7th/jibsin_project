@@ -868,6 +868,29 @@ fun BoundingBoxOverlay(
             return RiskLevel.NONE
         }
 
+        // 등기부등본의 위험 키워드 체크 - 항상 DANGER로 처리
+        val dangerKeywords = listOf("주택임차권", "신탁", "압류", "가처분", "가압류", "경매개시결정", "가등기")
+        if (notice.documentType == "registry_document") {
+            // 키워드가 텍스트에 포함되어 있는지 먼저 확인
+            for (keyword in dangerKeywords) {
+                if (notice.text.contains(keyword)) {
+                    // notice와 solution이 비어있는지 확인만 하고 그대로 DANGER 반환
+                    // val로 선언된 속성은 직접 수정할 수 없음
+                    // 여기서는 단순히 위험 수준만 반환
+                    return RiskLevel.DANGER
+                }
+            }
+
+            // 키에도 위험 키워드가 포함되어 있는지 확인
+            for (keyword in dangerKeywords) {
+                if (notice.key.contains(keyword)) {
+                    // Notice 객체의 필드가 val로 선언되어 있으므로 직접 수정 불가
+                    // 속성 값을 확인만 하고 DANGER 반환
+                    return RiskLevel.DANGER
+                }
+            }
+        }
+
         // 발급일자 관련 키워드가 포함된 경우 - 날짜가 다르면 항상 위험 표시
         if ((notice.key == "발급일자" || notice.key == "열람일시" ||
                     notice.key.contains("발급") || notice.key.contains("열람")) &&
@@ -888,7 +911,7 @@ fun BoundingBoxOverlay(
         }
 
         // 문제 없음인 경우 표시 안함 (발급일자 제외)
-        if (notice.notice == "문제 없음") {
+        if (notice.notice == "문제 없음" || notice.solution == "문제 없음") {
             return RiskLevel.NONE
         }
 
@@ -909,16 +932,6 @@ fun BoundingBoxOverlay(
             }
         }
 
-        // 등기부등본 특정 키워드 확인 (항상 위험)
-        if (notice.documentType == "registry_document") {
-            val dangerKeywords = listOf("주택임차권", "신탁", "압류", "가처분", "가압류", "경매개시결정", "가등기")
-            for (keyword in dangerKeywords) {
-                if (notice.key.contains(keyword)) {
-                    return RiskLevel.DANGER
-                }
-            }
-        }
-
         // 주소 정보 관련 위험 처리
         if ((notice.documentType == "contract" && (notice.key == "소재지" || notice.key == "임차할부분")) ||
             (notice.documentType == "building_registry" && (notice.key == "대지위치" || notice.key == "도로명주소")) ||
@@ -928,7 +941,19 @@ fun BoundingBoxOverlay(
             }
         }
 
-        return riskLevel
+        // 추가적인 위험 키워드 체크 - 알림 메시지에 위험 키워드가 포함되어 있으면 DANGER로 처리
+        val additionalDangerKeywords = listOf(
+            "압류", "가압류", "가처분", "경매", "위험", "주택임차권", "신탁", "경매개시결정", "가등기"
+        )
+
+        for (keyword in additionalDangerKeywords) {
+            if (notice.notice.contains(keyword)) {
+                return RiskLevel.DANGER
+            }
+        }
+
+        // 기본은 경고(주황색)로 설정
+        return RiskLevel.WARNING
     }
 
     Box(
