@@ -25,7 +25,7 @@ fun ErrorDialog(
 
 @Composable
 fun ProgressDialog(
-    message: String = "처리 중입니다... \n5분정도 소요될 수 있습니다."
+    message: String = "처리 중입니다... \n최대 10분정도 소요될 수 있습니다."
 ) {
     AlertDialog(
         onDismissRequest = { },
